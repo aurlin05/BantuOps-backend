@@ -1,0 +1,315 @@
+/* Custom CSS for BantuOps API Documentation */
+
+/* Brand colors */
+:root {
+  --bantuops-primary: #2E7D32;
+  --bantuops-secondary: #FFA726;
+  --bantuops-accent: #1976D2;
+  --bantuops-success: #4CAF50;
+  --bantuops-warning: #FF9800;
+  --bantuops-error: #F44336;
+  --bantuops-dark: #212121;
+  --bantuops-light: #F5F5F5;
+}
+
+/* Header customization */
+.swagger-ui .topbar {
+  background-color: var(--bantuops-primary);
+  border-bottom: 3px solid var(--bantuops-secondary);
+}
+
+.swagger-ui .topbar .download-url-wrapper {
+  display: none;
+}
+
+/* Custom logo */
+.swagger-ui .topbar-wrapper::before {
+  content: "🏢 BantuOps API";
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  margin-right: 20px;
+}
+
+/* Info section styling */
+.swagger-ui .info {
+  background: linear-gradient(135deg, var(--bantuops-light) 0%, #ffffff 100%);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-left: 4px solid var(--bantuops-primary);
+}
+
+.swagger-ui .info .title {
+  color: var(--bantuops-primary);
+  font-size: 2.5em;
+  margin-bottom: 10px;
+}
+
+.swagger-ui .info .description {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Server selection styling */
+.swagger-ui .servers > label {
+  color: var(--bantuops-primary);
+  font-weight: bold;
+}
+
+.swagger-ui .servers select {
+  border: 2px solid var(--bantuops-primary);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+/* Operation tags styling */
+.swagger-ui .opblock-tag {
+  background: linear-gradient(90deg, var(--bantuops-primary) 0%, var(--bantuops-accent) 100%);
+  color: white;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.swagger-ui .opblock-tag:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  transition: all 0.3s ease;
+}
+
+/* HTTP method colors */
+.swagger-ui .opblock.opblock-post {
+  border-color: var(--bantuops-success);
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.swagger-ui .opblock.opblock-get {
+  border-color: var(--bantuops-accent);
+  background: rgba(25, 118, 210, 0.1);
+}
+
+.swagger-ui .opblock.opblock-put {
+  border-color: var(--bantuops-warning);
+  background: rgba(255, 152, 0, 0.1);
+}
+
+.swagger-ui .opblock.opblock-delete {
+  border-color: var(--bantuops-error);
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.swagger-ui .opblock.opblock-patch {
+  border-color: var(--bantuops-secondary);
+  background: rgba(255, 167, 38, 0.1);
+}
+
+/* Operation summary styling */
+.swagger-ui .opblock .opblock-summary {
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.swagger-ui .opblock .opblock-summary-description {
+  font-size: 14px;
+  color: #666;
+  margin-top: 5px;
+}
+
+/* Response status codes */
+.swagger-ui .responses-inner h4 {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.swagger-ui .response-col_status {
+  font-weight: bold;
+}
+
+/* Success responses */
+.swagger-ui .responses-table .response-col_status:contains("200"),
+.swagger-ui .responses-table .response-col_status:contains("201") {
+  color: var(--bantuops-success);
+}
+
+/* Error responses */
+.swagger-ui .responses-table .response-col_status:contains("400"),
+.swagger-ui .responses-table .response-col_status:contains("401"),
+.swagger-ui .responses-table .response-col_status:contains("403"),
+.swagger-ui .responses-table .response-col_status:contains("404"),
+.swagger-ui .responses-table .response-col_status:contains("500") {
+  color: var(--bantuops-error);
+}
+
+/* Try it out button */
+.swagger-ui .btn.try-out__btn {
+  background-color: var(--bantuops-primary);
+  border-color: var(--bantuops-primary);
+  color: white;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-weight: bold;
+}
+
+.swagger-ui .btn.try-out__btn:hover {
+  background-color: #1B5E20;
+  border-color: #1B5E20;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Execute button */
+.swagger-ui .btn.execute {
+  background-color: var(--bantuops-accent);
+  border-color: var(--bantuops-accent);
+  color: white;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.swagger-ui .btn.execute:hover {
+  background-color: #1565C0;
+  border-color: #1565C0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Clear button */
+.swagger-ui .btn.btn-clear {
+  background-color: var(--bantuops-warning);
+  border-color: var(--bantuops-warning);
+  color: white;
+  border-radius: 6px;
+}
+
+/* Parameter tables */
+.swagger-ui .parameters-col_description {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.swagger-ui .parameter__name {
+  font-weight: bold;
+  color: var(--bantuops-primary);
+}
+
+.swagger-ui .parameter__type {
+  color: var(--bantuops-accent);
+  font-weight: bold;
+}
+
+/* Schema model */
+.swagger-ui .model-box {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 15px;
+}
+
+.swagger-ui .model .property {
+  padding: 8px 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.swagger-ui .model .property:last-child {
+  border-bottom: none;
+}
+
+/* Security schemes */
+.swagger-ui .auth-wrapper {
+  background-color: var(--bantuops-light);
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+  border-left: 4px solid var(--bantuops-accent);
+}
+
+.swagger-ui .auth-container .auth-btn-wrapper {
+  text-align: center;
+  margin-top: 15px;
+}
+
+.swagger-ui .btn.authorize {
+  background-color: var(--bantuops-accent);
+  border-color: var(--bantuops-accent);
+  color: white;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-weight: bold;
+}
+
+/* Custom badges */
+.swagger-ui .info .description h2::before {
+  content: "🌟 ";
+}
+
+.swagger-ui .info .description h3::before {
+  content: "📋 ";
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .swagger-ui .info .title {
+    font-size: 2em;
+  }
+  
+  .swagger-ui .opblock-tag {
+    padding: 10px;
+    font-size: 14px;
+  }
+  
+  .swagger-ui .topbar-wrapper::before {
+    font-size: 18px;
+  }
+}
+
+/* Loading animation */
+.swagger-ui .loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+}
+
+.swagger-ui .loading-container::after {
+  content: "⏳ Chargement de la documentation API BantuOps...";
+  color: var(--bantuops-primary);
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* Custom scrollbar */
+.swagger-ui ::-webkit-scrollbar {
+  width: 8px;
+}
+
+.swagger-ui ::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.swagger-ui ::-webkit-scrollbar-thumb {
+  background: var(--bantuops-primary);
+  border-radius: 4px;
+}
+
+.swagger-ui ::-webkit-scrollbar-thumb:hover {
+  background: #1B5E20;
+}
+
+/* Footer */
+.swagger-ui::after {
+  content: "© 2024 BantuOps - API Documentation | Version 1.0.0";
+  display: block;
+  text-align: center;
+  padding: 20px;
+  color: #666;
+  font-size: 12px;
+  border-top: 1px solid #e9ecef;
+  margin-top: 40px;
+}
