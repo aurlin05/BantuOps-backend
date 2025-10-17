@@ -69,19 +69,21 @@ public class RedisConfig {
 
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        // Default cache configuration
+        // Default cache configuration with optimized settings
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofHours(1)) // Default TTL: 1 hour
                 .serializeKeysWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new GenericJackson2JsonRedisSerializer(createObjectMapper())))
-                .disableCachingNullValues();
+                .disableCachingNullValues()
+                .prefixCacheNameWith("bantuops:cache:") // Namespace for better organization
+                .computePrefixWith(cacheName -> "bantuops:cache:" + cacheName + ":");
 
-        // Specific cache configurations with different TTLs
+        // Specific cache configurations with optimized TTLs and strategies
         Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
 
-        // Employee data cache - 2 hours TTL
+        // Employee data cache - 2 hours TTL (stable data)
         cacheConfigurations.put("employees", defaultConfig
                 .entryTtl(Duration.ofHours(2)));
 
@@ -89,45 +91,65 @@ public class RedisConfig {
         cacheConfigurations.put("payroll-calculations", defaultConfig
                 .entryTtl(Duration.ofMinutes(30)));
 
-        // Tax rates cache - 24 hours TTL (rarely changing)
+        // Tax rates cache - 24 hours TTL (rarely changing, government data)
         cacheConfigurations.put("tax-rates", defaultConfig
                 .entryTtl(Duration.ofHours(24)));
 
-        // Attendance rules cache - 12 hours TTL
+        // Tax calculations cache - 1 hour TTL (computed values)
+        cacheConfigurations.put("tax-calculations", defaultConfig
+                .entryTtl(Duration.ofHours(1)));
+
+        // Attendance rules cache - 12 hours TTL (business rules)
         cacheConfigurations.put("attendance-rules", defaultConfig
                 .entryTtl(Duration.ofHours(12)));
 
-        // User permissions cache - 1 hour TTL
+        // User permissions cache - 1 hour TTL (security sensitive)
         cacheConfigurations.put("user-permissions", defaultConfig
                 .entryTtl(Duration.ofHours(1)));
 
-        // Financial reports cache - 15 minutes TTL (for dashboard data)
+        // Financial reports cache - 15 minutes TTL (dashboard data, frequently updated)
         cacheConfigurations.put("financial-reports", defaultConfig
                 .entryTtl(Duration.ofMinutes(15)));
 
-        // Invoice data cache - 1 hour TTL
+        // Invoice data cache - 1 hour TTL (business documents)
         cacheConfigurations.put("invoices", defaultConfig
                 .entryTtl(Duration.ofHours(1)));
 
-        // System configuration cache - 6 hours TTL
+        // System configuration cache - 6 hours TTL (application settings)
         cacheConfigurations.put("system-config", defaultConfig
                 .entryTtl(Duration.ofHours(6)));
 
-        // Frequent calculations cache - 10 minutes TTL (for real-time calculations)
+        // Frequent calculations cache - 10 minutes TTL (real-time calculations)
         cacheConfigurations.put("frequent-calculations", defaultConfig
                 .entryTtl(Duration.ofMinutes(10)));
 
-        // Session metadata cache - 25 hours TTL (outlives session)
+        // Session metadata cache - 25 hours TTL (outlives session for cleanup)
         cacheConfigurations.put("session-metadata", defaultConfig
                 .entryTtl(Duration.ofHours(25)));
 
-        // Business rules cache - 4 hours TTL
+        // Business rules cache - 4 hours TTL (validation rules)
         cacheConfigurations.put("business-rules", defaultConfig
                 .entryTtl(Duration.ofHours(4)));
 
-        // Audit cache - 2 hours TTL
+        // Audit cache - 2 hours TTL (logging and monitoring)
         cacheConfigurations.put("audit-cache", defaultConfig
                 .entryTtl(Duration.ofHours(2)));
+
+        // Performance metrics cache - 5 minutes TTL (monitoring data)
+        cacheConfigurations.put("performance-metrics", defaultConfig
+                .entryTtl(Duration.ofMinutes(5)));
+
+        // Database query cache - 20 minutes TTL (query results)
+        cacheConfigurations.put("database-queries", defaultConfig
+                .entryTtl(Duration.ofMinutes(20)));
+
+        // Bulk operation cache - 1 hour TTL (batch processing results)
+        cacheConfigurations.put("bulk-operations", defaultConfig
+                .entryTtl(Duration.ofHours(1)));
+
+        // Exchange rates cache - 4 hours TTL (external API data)
+        cacheConfigurations.put("exchange-rates", defaultConfig
+                .entryTtl(Duration.ofHours(4)));
 
         RedisCacheManager cacheManager = RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(defaultConfig)
@@ -136,7 +158,7 @@ public class RedisConfig {
                 .enableStatistics() // Enable cache statistics for monitoring
                 .build();
 
-        log.info("Redis cache manager configured with {} cache configurations", cacheConfigurations.size());
+        log.info("Advanced Redis cache manager configured with {} cache configurations", cacheConfigurations.size());
         return cacheManager;
     }
 

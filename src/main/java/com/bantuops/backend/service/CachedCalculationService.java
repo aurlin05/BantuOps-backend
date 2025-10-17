@@ -1,113 +1,138 @@
 package com.bantuops.backend.service;
 
+import com.bantuops.backend.dto.PayrollResult;
+import com.bantuops.backend.dto.TaxCalculation;
+import com.bantuops.backend.dto.VATCalculation;
+import com.bantuops.backend.entity.Employee;
+import com.bantuops.backend.entity.AttendanceRecord;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
 import java.util.Map;
 
+/**
+ * Service pour la mise en cache des calculs fréquents
+ * Optimise les performances en évitant les recalculs répétitifs
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CachedCalculationService {
 
+    private final PayrollCalculationService payrollCalculationService;
+    private final TaxCalculationService taxCalculationService;
+    private final VATCalculationService vatCalculationService;
+    private final EmployeeService employeeService;
+    private final AttendanceService attendanceService;
+
     /**
-     * Cache tax calculations for frequently accessed salary ranges
+     * Cache les calculs de taxes avec clé composite
      */
-    @Cacheable(value = "tax-rates", key = "#salary + '_' + #period.toString()")
-    public BigDecimal calculateTaxRate(BigDecimal salary, YearMonth period) {
-        log.debug("Calculating tax rate for salary: {} in period: {}", salary, period);
-        
-        // Senegalese tax brackets (simplified)
-        if (salary.compareTo(new BigDecimal("30000")) <= 0) {
-            return BigDecimal.ZERO; // No tax for low income
-        } else if (salary.compareTo(new BigDecimal("50000")) <= 0) {
-            return new BigDecimal("0.10"); // 10% tax
-        } else if (salary.compareTo(new BigDecimal("100000")) <= 0) {
-            return new BigDecimal("0.15"); // 15% tax
-        } else if (salary.compareTo(new BigDecimal("200000")) <= 0) {
-            return new BigDecimal("0.20"); // 20% tax
-        } else {
-            return new BigDecimal("0.25"); // 25% tax for high income
-        }
+    @Cacheable(value = "tax-calculations", 
+               key = "#salary.toString() + '_' + #period.toString() + '_' + #employeeType",
+               condition = "#salary != null && #salary.compareTo(T(java.math.BigDecimal).ZERO) > 0")
+    public TaxCalculation calculateTaxCached(BigDecimal salary, YearMonth period, String employeeType) {
+        log.debug("Calculating tax for salary: {}, period: {}, type: {}", salary, period, employeeType);
+        return taxCalculationService.calculateTaxes(salary, period, employeeType);
     }
 
     /**
-     * Cache social contribution rates
+     * Cache les données d'employé avec leurs informations détaillées
      */
-    @Cacheable(value = "tax-rates", key = "'social_contrib_' + #salary")
-    public Map<String, BigDecimal> calculateSocialContributions(BigDecimal salary) {
-        log.debug("Calculating social contributions for salary: {}", salary);
-        
-        return Map.of(
-            "IPRES", salary.multiply(new BigDecimal("0.06")), // 6% IPRES
-            "CSS", salary.multiply(new BigDecimal("0.07")),   // 7% CSS
-            "FNR", salary.multiply(new BigDecimal("0.03"))    // 3% FNR
-        );
+    @Cacheable(value = "employees", 
+               key = "#employeeId",
+               unless = "#result == null")
+    public Employee getEmployeeWithDetailsCached(Long employeeId) {
+        log.debug("Fetching employee details for ID: {}", employeeId);
+        return employeeService.getEmployeeWithDetails(employeeId);
     }
 
     /**
-     * Cache employee data with frequent access
+     * Cache les calculs de paie complets
      */
-    @Cacheable(value = "employees", key = "#employeeId")
-    public Object getEmployeeData(Long employeeId) {
-        log.debug("Fetching employee data from cache for ID: {}", employeeId);
-        // This will be implemented when we have the Employee entity
-        return null;
+    @Cacheable(value = "payroll-calculations",
+               key = "#employeeId + '_' + #period.toString()",
+               condition = "#employeeId != null && #period != null")
+    public PayrollResult calculatePayrollCached(Long employeeId, YearMonth period) {
+        log.debug("Calculating payroll for employee: {}, period: {}", employeeId, period);
+        return payrollCalculationService.calculatePayroll(employeeId, period);
     }
 
     /**
-     * Cache payroll calculations
+     * Cache les calculs de TVA
      */
-    @Cacheable(value = "payroll-calculations", key = "#employeeId + '_' + #period.toString()")
-    public Object getPayrollCalculation(Long employeeId, YearMonth period) {
-        log.debug("Fetching payroll calculation from cache for employee: {} in period: {}", employeeId, period);
-        // This will be implemented when we have the PayrollCalculationService
-        return null;
+    @Cacheable(value = "frequent-calculations",
+               key = "'vat_' + #amount.toString() + '_' + #vatRate.toString()",
+               condition = "#amount != null && #amount.compareTo(T(java.math.BigDecimal).ZERO) > 0")
+    public VATCalculation calculateVATCached(BigDecimal amount, BigDecimal vatRate) {
+        log.debug("Calculating VAT for amount: {}, rate: {}", amount, vatRate);
+        return vatCalculationService.calculateVAT(amount, vatRate);
     }
 
     /**
-     * Cache attendance rules
+     * Cache les règles d'assiduité par département
      */
-    @Cacheable(value = "attendance-rules", key = "'company_rules'")
-    public Map<String, Object> getAttendanceRules() {
-        log.debug("Fetching attendance rules from cache");
-        
-        return Map.of(
-            "lateThresholdMinutes", 15,
-            "halfDayThresholdMinutes", 240, // 4 hours
-            "maxLatenessPenaltyPercent", 0.05, // 5% salary deduction
-            "workingHoursPerDay", 8,
-            "workingDaysPerWeek", 5
-        );
+    @Cacheable(value = "attendance-rules",
+               key = "#department + '_' + #contractType",
+               unless = "#result == null || #result.isEmpty()")
+    public Map<String, Object> getAttendanceRulesCached(String department, String contractType) {
+        log.debug("Fetching attendance rules for department: {}, contract: {}", department, contractType);
+        return attendanceService.getAttendanceRules(department, contractType);
     }
 
     /**
-     * Cache user permissions
+     * Cache les données d'assiduité pour une période
      */
-    @Cacheable(value = "user-permissions", key = "#userId")
-    public Object getUserPermissions(Long userId) {
-        log.debug("Fetching user permissions from cache for user: {}", userId);
-        // This will be implemented when we have the User service
-        return null;
+    @Cacheable(value = "frequent-calculations",
+               key = "'attendance_' + #employeeId + '_' + #startDate.toString() + '_' + #endDate.toString()")
+    public List<AttendanceRecord> getAttendanceRecordsCached(Long employeeId, LocalDate startDate, LocalDate endDate) {
+        log.debug("Fetching attendance records for employee: {} from {} to {}", employeeId, startDate, endDate);
+        return attendanceService.getAttendanceRecords(employeeId, startDate, endDate);
     }
 
     /**
-     * Update cached employee data
+     * Cache les taux de change et données financières
      */
-    @CachePut(value = "employees", key = "#employeeId")
-    public Object updateEmployeeCache(Long employeeId, Object employeeData) {
-        log.debug("Updating employee cache for ID: {}", employeeId);
-        return employeeData;
+    @Cacheable(value = "financial-reports",
+               key = "'exchange_rates_' + #currency + '_' + #date.toString()")
+    public BigDecimal getExchangeRateCached(String currency, LocalDate date) {
+        log.debug("Fetching exchange rate for currency: {} on date: {}", currency, date);
+        // Simulation - dans un vrai système, cela viendrait d'une API externe
+        return BigDecimal.valueOf(655.957); // CFA to EUR rate example
     }
 
     /**
-     * Evict employee cache when data changes
+     * Cache les configurations système
+     */
+    @Cacheable(value = "system-config",
+               key = "#configKey",
+               unless = "#result == null")
+    public Object getSystemConfigCached(String configKey) {
+        log.debug("Fetching system configuration for key: {}", configKey);
+        // Récupération depuis la base de données ou fichier de configuration
+        return getSystemConfiguration(configKey);
+    }
+
+    /**
+     * Mise à jour du cache avec nouvelle valeur
+     */
+    @CachePut(value = "employees", key = "#employee.id")
+    public Employee updateEmployeeCache(Employee employee) {
+        log.debug("Updating employee cache for ID: {}", employee.getId());
+        return employee;
+    }
+
+    /**
+     * Éviction du cache pour un employé spécifique
      */
     @CacheEvict(value = "employees", key = "#employeeId")
     public void evictEmployeeCache(Long employeeId) {
@@ -115,174 +140,103 @@ public class CachedCalculationService {
     }
 
     /**
-     * Evict payroll cache for an employee
+     * Éviction du cache de paie pour un employé
      */
-    @CacheEvict(value = "payroll-calculations", allEntries = true, condition = "#employeeId != null")
-    public void evictPayrollCache(Long employeeId) {
-        log.debug("Evicting payroll cache for employee: {}", employeeId);
+    @CacheEvict(value = "payroll-calculations", 
+                key = "#employeeId + '_' + #period.toString()")
+    public void evictPayrollCache(Long employeeId, YearMonth period) {
+        log.debug("Evicting payroll cache for employee: {}, period: {}", employeeId, period);
     }
 
     /**
-     * Evict all payroll calculations cache
+     * Éviction multiple des caches liés à un employé
      */
-    @CacheEvict(value = "payroll-calculations", allEntries = true)
-    public void evictAllPayrollCache() {
-        log.debug("Evicting all payroll calculations cache");
+    @Caching(evict = {
+        @CacheEvict(value = "employees", key = "#employeeId"),
+        @CacheEvict(value = "payroll-calculations", allEntries = true, condition = "#employeeId != null"),
+        @CacheEvict(value = "frequent-calculations", allEntries = true, condition = "#employeeId != null")
+    })
+    public void evictAllEmployeeRelatedCaches(Long employeeId) {
+        log.debug("Evicting all caches related to employee: {}", employeeId);
     }
 
     /**
-     * Evict user permissions cache
-     */
-    @CacheEvict(value = "user-permissions", key = "#userId")
-    public void evictUserPermissionsCache(Long userId) {
-        log.debug("Evicting user permissions cache for user: {}", userId);
-    }
-
-    /**
-     * Evict attendance rules cache (when rules are updated)
+     * Éviction du cache des règles d'assiduité
      */
     @CacheEvict(value = "attendance-rules", allEntries = true)
     public void evictAttendanceRulesCache() {
-        log.debug("Evicting attendance rules cache");
+        log.debug("Evicting all attendance rules cache");
     }
 
     /**
-     * Cache frequent calculations with short TTL for real-time data
+     * Éviction du cache des taux de taxes
      */
-    @Cacheable(value = "frequent-calculations", key = "'dashboard_metrics_' + #userId")
-    public Map<String, Object> getDashboardMetrics(Long userId) {
-        log.debug("Calculating dashboard metrics for user: {}", userId);
-        
-        // This would typically fetch real-time data from database
-        return Map.of(
-            "totalEmployees", 0,
-            "activePayrolls", 0,
-            "pendingInvoices", 0,
-            "monthlyRevenue", BigDecimal.ZERO,
-            "lastUpdated", System.currentTimeMillis()
-        );
+    @CacheEvict(value = "tax-rates", allEntries = true)
+    public void evictTaxRatesCache() {
+        log.debug("Evicting all tax rates cache");
     }
 
     /**
-     * Cache business rules with medium TTL
+     * Éviction complète de tous les caches
      */
-    @Cacheable(value = "business-rules", key = "'senegal_tax_brackets'")
-    public Map<String, Object> getSenegalTaxBrackets() {
-        log.debug("Fetching Senegal tax brackets from cache");
-        
-        return Map.of(
-            "brackets", Map.of(
-                "0-30000", BigDecimal.ZERO,
-                "30001-50000", new BigDecimal("0.10"),
-                "50001-100000", new BigDecimal("0.15"),
-                "100001-200000", new BigDecimal("0.20"),
-                "200001+", new BigDecimal("0.25")
-            ),
-            "lastUpdated", System.currentTimeMillis()
-        );
+    @Caching(evict = {
+        @CacheEvict(value = "employees", allEntries = true),
+        @CacheEvict(value = "payroll-calculations", allEntries = true),
+        @CacheEvict(value = "tax-calculations", allEntries = true),
+        @CacheEvict(value = "attendance-rules", allEntries = true),
+        @CacheEvict(value = "frequent-calculations", allEntries = true),
+        @CacheEvict(value = "financial-reports", allEntries = true),
+        @CacheEvict(value = "system-config", allEntries = true)
+    })
+    public void evictAllCaches() {
+        log.info("Evicting all application caches");
     }
 
     /**
-     * Cache VAT rates for Senegal
+     * Méthode utilitaire pour récupérer la configuration système
      */
-    @Cacheable(value = "business-rules", key = "'senegal_vat_rates'")
-    public Map<String, BigDecimal> getSenegalVATRates() {
-        log.debug("Fetching Senegal VAT rates from cache");
-        
-        return Map.of(
-            "standard", new BigDecimal("0.18"), // 18% standard VAT
-            "reduced", new BigDecimal("0.10"),  // 10% reduced VAT for some goods
-            "exempt", BigDecimal.ZERO           // 0% for exempt goods
-        );
-    }
-
-    /**
-     * Cache overtime calculation rules
-     */
-    @Cacheable(value = "business-rules", key = "'overtime_rules'")
-    public Map<String, Object> getOvertimeRules() {
-        log.debug("Fetching overtime rules from cache");
-        
-        return Map.of(
-            "normalHoursPerDay", 8,
-            "normalHoursPerWeek", 40,
-            "overtimeMultiplier", new BigDecimal("1.5"), // 150% for overtime
-            "nightShiftMultiplier", new BigDecimal("1.25"), // 125% for night shift
-            "weekendMultiplier", new BigDecimal("2.0"), // 200% for weekend work
-            "holidayMultiplier", new BigDecimal("2.5") // 250% for holiday work
-        );
-    }
-
-    /**
-     * Cache frequently accessed calculation results
-     */
-    @Cacheable(value = "frequent-calculations", key = "'monthly_summary_' + #employeeId + '_' + #period.toString()")
-    public Map<String, Object> getMonthlySummary(Long employeeId, YearMonth period) {
-        log.debug("Calculating monthly summary for employee: {} in period: {}", employeeId, period);
-        
-        // This would typically aggregate data from multiple sources
-        return Map.of(
-            "employeeId", employeeId,
-            "period", period.toString(),
-            "totalWorkingDays", 22,
-            "actualWorkingDays", 0,
-            "totalAbsences", 0,
-            "totalLateMinutes", 0,
-            "overtimeHours", BigDecimal.ZERO,
-            "grossSalary", BigDecimal.ZERO,
-            "netSalary", BigDecimal.ZERO
-        );
-    }
-
-    /**
-     * Evict frequent calculations cache
-     */
-    @CacheEvict(value = "frequent-calculations", allEntries = true)
-    public void evictFrequentCalculationsCache() {
-        log.debug("Evicting frequent calculations cache");
-    }
-
-    /**
-     * Evict business rules cache
-     */
-    @CacheEvict(value = "business-rules", allEntries = true)
-    public void evictBusinessRulesCache() {
-        log.debug("Evicting business rules cache");
-    }
-
-    /**
-     * Warm up cache with frequently accessed data
-     */
-    public void warmUpCache() {
-        log.info("Starting cache warm-up process");
-        
-        try {
-            // Pre-load attendance rules
-            getAttendanceRules();
-            
-            // Pre-load business rules
-            getSenegalTaxBrackets();
-            getSenegalVATRates();
-            getOvertimeRules();
-            
-            // Pre-calculate common tax rates
-            YearMonth currentPeriod = YearMonth.now();
-            BigDecimal[] commonSalaries = {
-                new BigDecimal("50000"),
-                new BigDecimal("100000"),
-                new BigDecimal("150000"),
-                new BigDecimal("200000"),
-                new BigDecimal("300000")
-            };
-            
-            for (BigDecimal salary : commonSalaries) {
-                calculateTaxRate(salary, currentPeriod);
-                calculateSocialContributions(salary);
-            }
-            
-            log.info("Cache warm-up completed successfully");
-        } catch (Exception e) {
-            log.error("Cache warm-up failed", e);
+    private Object getSystemConfiguration(String configKey) {
+        // Implémentation de récupération de configuration
+        // Cela pourrait venir d'une base de données, fichier, etc.
+        switch (configKey) {
+            case "default.vat.rate":
+                return BigDecimal.valueOf(0.18); // 18% VAT rate for Senegal
+            case "minimum.wage":
+                return BigDecimal.valueOf(60000); // SMIG Senegal
+            case "max.overtime.hours":
+                return 8;
+            case "company.fiscal.year.start":
+                return "01-01";
+            default:
+                return null;
         }
+    }
+
+    /**
+     * Vérifie si une valeur est en cache
+     */
+    public boolean isCached(String cacheName, String key) {
+        try {
+            // Cette méthode nécessiterait l'injection du CacheManager
+            // pour vérifier l'existence d'une clé dans le cache
+            return true; // Placeholder
+        } catch (Exception e) {
+            log.warn("Error checking cache existence for key: {} in cache: {}", key, cacheName, e);
+            return false;
+        }
+    }
+
+    /**
+     * Statistiques du cache pour monitoring
+     */
+    public Map<String, Object> getCacheStatistics() {
+        // Retourne les statistiques des caches pour le monitoring
+        // Implémentation dépendante du CacheManager utilisé
+        return Map.of(
+            "cache.employees.size", "N/A",
+            "cache.payroll.size", "N/A",
+            "cache.tax.size", "N/A",
+            "cache.hit.ratio", "N/A"
+        );
     }
 }

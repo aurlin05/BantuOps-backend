@@ -1,10 +1,19 @@
 package com.bantuops.backend.service;
 
 import com.bantuops.backend.aspect.ApiAuditInterceptor;
-import com.bantuops.backend.aspect.PerformanceMonitoringAspect;
+import com.bantuops.backend.entity.AuditLog;
+import com.bantuops.backend.repository.AuditLogRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -13,15 +22,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Service d'audit pour l'enregistrement des événements système
- * Conforme aux exigences 7.4, 7.5, 7.6, 6.1, 6.2 pour l'audit complet
- * 
- * Note: Cette implémentation utilise le logging pour l'instant.
- * L'implémentation complète avec base de données sera faite dans la tâche 7.1
+ * Service d'audit pour l'enregistrement asynchrone des événements système
+ * Conforme aux exigences 7.4, 7.5, 7.6 pour l'audit complet avec persistance en base
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class AuditService {
+
+    private final AuditLogRepository auditLogRepository;
+    private final ObjectMapper objectMapper;
 
     // Compteurs pour la détection d'abus
     private final Map<String, AtomicInteger> failedLoginAttempts = new ConcurrentHashMap<>();
@@ -32,11 +42,12 @@ public class AuditService {
     // ==================== AUDIT DES APIS ====================
 
     /**
-     * Enregistre un appel d'API de manière asynchrone
+     * Enregistre un appel d'API de manière asynchrone avec persistance en base
      */
     @Async
     public void logApiCall(ApiAuditInterceptor.ApiAuditInfo auditInfo) {
         try {
+            // Log traditionnel pour compatibilité
             log.info("API_CALL: TraceID={}, Method={}, URI={}, User={}, Status={}, Duration={}ms, Success={}", 
                     auditInfo.getTraceId(),
                     auditInfo.getMethod(),
@@ -46,12 +57,41 @@ public class AuditService {
                     auditInfo.getDuration(),
                     auditInfo.isSuccess());
 
+            // Persistance en base de données
+            AuditLog auditLog = AuditLog.builder()
+                    .entityType("API_CALL")
+                    .entityId(0L) // Pas d'entité spécifique pour les appels API
+                    .action(auditInfo.isSuccess() ? AuditLog.AuditAction.VIEW : AuditLog.AuditAction.UNAUTHORIZED_ACCESS)
+                    .userId(auditInfo.getUsername())
+                    .userRole(getCurrentUserRole())
+                    .ipAddress(getCurrentClientIp())
+                    .userAgent(getCurrentUserAgent())
+                    .sessionId(getCurrentSessionId())
+                    .timestamp(LocalDateTime.now())
+                    .description(String.format("%s %s - Status: %d - Duration: %dms", 
+                            auditInfo.getMethod(), auditInfo.getUri(), 
+                            auditInfo.getResponseStatus(), auditInfo.getDuration()))
+                    .metadata(createApiCallMetadata(auditInfo))
+                    .sensitiveData(isSensitiveApiCall(auditInfo.getUri()))
+                    .severity(auditInfo.isSuccess() ? "INFO" : "WARNING")
+                    .build();
+
+            auditLogRepository.save(auditLog);
+
             // Logger les erreurs avec plus de détails
             if (!auditInfo.isSuccess()) {
                 log.error("API_ERROR: TraceID={}, Error={}, Type={}", 
                         auditInfo.getTraceId(),
                         auditInfo.getErrorMessage(),
                         auditInfo.getErrorType());
+                
+                // Créer un log d'audit spécifique pour l'erreur
+                logSecurityEvent("API_ERROR", auditInfo.getUsername(), 
+                        Map.of("traceId", auditInfo.getTraceId(),
+                               "error", auditInfo.getErrorMessage(),
+                               "errorType", auditInfo.getErrorType(),
+                               "uri", auditInfo.getUri()),
+                        LocalDateTime.now());
             }
 
             // Alerter sur les requêtes lentes
@@ -60,6 +100,12 @@ public class AuditService {
                         auditInfo.getTraceId(),
                         auditInfo.getUri(),
                         auditInfo.getDuration());
+                
+                logPerformanceAlert("SLOW_API_CALL", 
+                        String.format("Requête lente détectée: %s", auditInfo.getUri()),
+                        Map.of("traceId", auditInfo.getTraceId(),
+                               "duration", auditInfo.getDuration(),
+                               "uri", auditInfo.getUri()));
             }
 
         } catch (Exception e) {
@@ -70,12 +116,34 @@ public class AuditService {
     // ==================== AUDIT DE SÉCURITÉ ====================
 
     /**
-     * Enregistre un événement de sécurité générique
+     * Enregistre un événement de sécurité générique avec persistance
      */
     @Async
     public void logSecurityEvent(String eventType, String principal, Map<String, Object> data, LocalDateTime timestamp) {
-        log.info("SECURITY_EVENT: Type={}, Principal={}, Timestamp={}, Data={}", 
-                eventType, principal, timestamp, data);
+        try {
+            log.info("SECURITY_EVENT: Type={}, Principal={}, Timestamp={}, Data={}", 
+                    eventType, principal, timestamp, data);
+
+            AuditLog auditLog = AuditLog.builder()
+                    .entityType("SECURITY_EVENT")
+                    .entityId(0L)
+                    .action(getSecurityAction(eventType))
+                    .userId(principal)
+                    .userRole(getCurrentUserRole())
+                    .ipAddress(getCurrentClientIp())
+                    .userAgent(getCurrentUserAgent())
+                    .sessionId(getCurrentSessionId())
+                    .timestamp(timestamp)
+                    .description(String.format("Événement de sécurité: %s", eventType))
+                    .metadata(serializeToJson(data))
+                    .sensitiveData(true)
+                    .severity(getSecurityEventSeverity(eventType))
+                    .build();
+
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            log.error("Erreur lors de l'enregistrement de l'événement de sécurité: {}", e.getMessage());
+        }
     }
 
     /**
@@ -361,7 +429,302 @@ public class AuditService {
      */
     @Async
     public void logDataExport(String dataType, String period, boolean anonymize) {
-        log.info("DATA_EXPORT: Type={}, Period={}, Anonymized={}", 
-                dataType, period, anonymize);
+        try {
+            log.info("DATA_EXPORT: Type={}, Period={}, Anonymized={}", 
+                    dataType, period, anonymize);
+
+            AuditLog auditLog = AuditLog.builder()
+                    .entityType("DATA_EXPORT")
+                    .entityId(0L)
+                    .action(AuditLog.AuditAction.EXPORT)
+                    .userId(getCurrentUserId())
+                    .userRole(getCurrentUserRole())
+                    .ipAddress(getCurrentClientIp())
+                    .userAgent(getCurrentUserAgent())
+                    .sessionId(getCurrentSessionId())
+                    .timestamp(LocalDateTime.now())
+                    .description(String.format("Export de données: %s pour la période %s", dataType, period))
+                    .metadata(serializeToJson(Map.of("dataType", dataType, "period", period, "anonymized", anonymize)))
+                    .sensitiveData(!anonymize)
+                    .severity("HIGH")
+                    .build();
+
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            log.error("Erreur lors de l'enregistrement de l'export de données: {}", e.getMessage());
+        }
+    }
+
+    // ==================== MÉTHODES UTILITAIRES ====================
+
+    /**
+     * Récupère l'ID de l'utilisateur actuel
+     */
+    private String getCurrentUserId() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.isAuthenticated() && 
+                !"anonymousUser".equals(authentication.getPrincipal())) {
+                return authentication.getName();
+            }
+        } catch (Exception e) {
+            log.debug("Impossible de récupérer l'ID utilisateur: {}", e.getMessage());
+        }
+        return "system";
+    }
+
+    /**
+     * Récupère le rôle de l'utilisateur actuel
+     */
+    private String getCurrentUserRole() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.getAuthorities() != null) {
+                return authentication.getAuthorities().stream()
+                        .map(authority -> authority.getAuthority())
+                        .reduce((a, b) -> a + "," + b)
+                        .orElse("USER");
+            }
+        } catch (Exception e) {
+            log.debug("Impossible de récupérer le rôle utilisateur: {}", e.getMessage());
+        }
+        return "UNKNOWN";
+    }
+
+    /**
+     * Récupère l'adresse IP du client actuel
+     */
+    private String getCurrentClientIp() {
+        try {
+            ServletRequestAttributes requestAttributes = 
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            
+            if (requestAttributes != null) {
+                HttpServletRequest request = requestAttributes.getRequest();
+                
+                String xForwardedFor = request.getHeader("X-Forwarded-For");
+                if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+                    return xForwardedFor.split(",")[0].trim();
+                }
+                
+                String xRealIp = request.getHeader("X-Real-IP");
+                if (xRealIp != null && !xRealIp.isEmpty()) {
+                    return xRealIp;
+                }
+                
+                return request.getRemoteAddr();
+            }
+        } catch (Exception e) {
+            log.debug("Impossible de récupérer l'IP client: {}", e.getMessage());
+        }
+        return "unknown";
+    }
+
+    /**
+     * Récupère le User-Agent du client actuel
+     */
+    private String getCurrentUserAgent() {
+        try {
+            ServletRequestAttributes requestAttributes = 
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            
+            if (requestAttributes != null) {
+                HttpServletRequest request = requestAttributes.getRequest();
+                return request.getHeader("User-Agent");
+            }
+        } catch (Exception e) {
+            log.debug("Impossible de récupérer le User-Agent: {}", e.getMessage());
+        }
+        return "unknown";
+    }
+
+    /**
+     * Récupère l'ID de session actuel
+     */
+    private String getCurrentSessionId() {
+        try {
+            ServletRequestAttributes requestAttributes = 
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            
+            if (requestAttributes != null) {
+                HttpServletRequest request = requestAttributes.getRequest();
+                return request.getSession(false) != null ? request.getSession().getId() : null;
+            }
+        } catch (Exception e) {
+            log.debug("Impossible de récupérer l'ID de session: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Sérialise un objet en JSON
+     */
+    private String serializeToJson(Object object) {
+        try {
+            return objectMapper.writeValueAsString(object);
+        } catch (JsonProcessingException e) {
+            log.warn("Erreur lors de la sérialisation JSON: {}", e.getMessage());
+            return object.toString();
+        }
+    }
+
+    /**
+     * Crée les métadonnées pour un appel API
+     */
+    private String createApiCallMetadata(ApiAuditInterceptor.ApiAuditInfo auditInfo) {
+        Map<String, Object> metadata = Map.of(
+                "traceId", auditInfo.getTraceId(),
+                "method", auditInfo.getMethod(),
+                "uri", auditInfo.getUri(),
+                "responseStatus", auditInfo.getResponseStatus(),
+                "duration", auditInfo.getDuration(),
+                "success", auditInfo.isSuccess()
+        );
+        return serializeToJson(metadata);
+    }
+
+    /**
+     * Détermine si un appel API concerne des données sensibles
+     */
+    private boolean isSensitiveApiCall(String uri) {
+        return uri.contains("/payroll") || 
+               uri.contains("/financial") || 
+               uri.contains("/employee") ||
+               uri.contains("/invoice") ||
+               uri.contains("/transaction");
+    }
+
+    /**
+     * Détermine l'action d'audit pour un événement de sécurité
+     */
+    private AuditLog.AuditAction getSecurityAction(String eventType) {
+        return switch (eventType.toUpperCase()) {
+            case "LOGIN_FAILED", "BAD_CREDENTIALS", "DISABLED_ACCOUNT", "EXPIRED_ACCOUNT", "LOCKED_ACCOUNT" -> 
+                AuditLog.AuditAction.FAILED_LOGIN_ATTEMPT;
+            case "AUTHORIZATION_DENIED", "ACCESS_DENIED" -> 
+                AuditLog.AuditAction.UNAUTHORIZED_ACCESS;
+            case "API_ERROR" -> 
+                AuditLog.AuditAction.ABNORMAL_ACTIVITY;
+            default -> 
+                AuditLog.AuditAction.VIEW;
+        };
+    }
+
+    /**
+     * Détermine la sévérité d'un événement de sécurité
+     */
+    private String getSecurityEventSeverity(String eventType) {
+        return switch (eventType.toUpperCase()) {
+            case "LOGIN_FAILED", "BAD_CREDENTIALS" -> "MEDIUM";
+            case "DISABLED_ACCOUNT", "EXPIRED_ACCOUNT", "LOCKED_ACCOUNT" -> "HIGH";
+            case "AUTHORIZATION_DENIED", "ACCESS_DENIED" -> "HIGH";
+            case "API_ERROR" -> "MEDIUM";
+            case "SECURITY_BREACH", "SYSTEM_COMPROMISE" -> "CRITICAL";
+            default -> "LOW";
+        };
+    }
+
+    // ==================== MÉTHODES D'AUDIT AVANCÉES ====================
+
+    /**
+     * Enregistre un événement d'audit avec tous les détails
+     */
+    @Async
+    public void logAuditEvent(String entityType, Long entityId, AuditLog.AuditAction action, 
+                             String description, Object oldValue, Object newValue, 
+                             String reason, boolean sensitiveData) {
+        try {
+            AuditLog auditLog = AuditLog.builder()
+                    .entityType(entityType)
+                    .entityId(entityId)
+                    .action(action)
+                    .userId(getCurrentUserId())
+                    .userRole(getCurrentUserRole())
+                    .ipAddress(getCurrentClientIp())
+                    .userAgent(getCurrentUserAgent())
+                    .sessionId(getCurrentSessionId())
+                    .timestamp(LocalDateTime.now())
+                    .description(description)
+                    .oldValues(oldValue != null ? serializeToJson(oldValue) : null)
+                    .newValues(newValue != null ? serializeToJson(newValue) : null)
+                    .reason(reason)
+                    .sensitiveData(sensitiveData)
+                    .severity(sensitiveData ? "HIGH" : "MEDIUM")
+                    .build();
+
+            auditLogRepository.save(auditLog);
+            
+            log.info("AUDIT_EVENT: Entity={}, ID={}, Action={}, User={}, Sensitive={}", 
+                    entityType, entityId, action, getCurrentUserId(), sensitiveData);
+                    
+        } catch (Exception e) {
+            log.error("Erreur lors de l'enregistrement de l'événement d'audit: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Enregistre une violation de règle métier
+     */
+    @Async
+    public void logBusinessRuleViolation(String ruleName, String entityType, Long entityId, 
+                                        String violationDetails, Map<String, Object> context) {
+        try {
+            AuditLog auditLog = AuditLog.builder()
+                    .entityType(entityType)
+                    .entityId(entityId)
+                    .action(AuditLog.AuditAction.BUSINESS_RULE_VIOLATION)
+                    .userId(getCurrentUserId())
+                    .userRole(getCurrentUserRole())
+                    .ipAddress(getCurrentClientIp())
+                    .userAgent(getCurrentUserAgent())
+                    .sessionId(getCurrentSessionId())
+                    .timestamp(LocalDateTime.now())
+                    .description(String.format("Violation de règle métier: %s - %s", ruleName, violationDetails))
+                    .metadata(serializeToJson(context))
+                    .sensitiveData(true)
+                    .severity("HIGH")
+                    .build();
+
+            auditLogRepository.save(auditLog);
+            
+            log.warn("BUSINESS_RULE_VIOLATION: Rule={}, Entity={}, ID={}, Details={}", 
+                    ruleName, entityType, entityId, violationDetails);
+                    
+        } catch (Exception e) {
+            log.error("Erreur lors de l'enregistrement de la violation de règle métier: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Enregistre une tentative de compromission système
+     */
+    @Async
+    public void logSystemCompromiseAttempt(String attackType, String description, 
+                                          Map<String, Object> attackDetails) {
+        try {
+            AuditLog auditLog = AuditLog.builder()
+                    .entityType("SYSTEM_SECURITY")
+                    .entityId(0L)
+                    .action(AuditLog.AuditAction.SYSTEM_COMPROMISE)
+                    .userId(getCurrentUserId())
+                    .userRole(getCurrentUserRole())
+                    .ipAddress(getCurrentClientIp())
+                    .userAgent(getCurrentUserAgent())
+                    .sessionId(getCurrentSessionId())
+                    .timestamp(LocalDateTime.now())
+                    .description(String.format("Tentative de compromission: %s - %s", attackType, description))
+                    .metadata(serializeToJson(attackDetails))
+                    .sensitiveData(true)
+                    .severity("CRITICAL")
+                    .build();
+
+            auditLogRepository.save(auditLog);
+            
+            log.error("SYSTEM_COMPROMISE_ATTEMPT: Type={}, Description={}, IP={}", 
+                    attackType, description, getCurrentClientIp());
+                    
+        } catch (Exception e) {
+            log.error("Erreur lors de l'enregistrement de la tentative de compromission: {}", e.getMessage());
+        }
     }
 }
