@@ -35,9 +35,13 @@ repositories {
 
 ext {
 	set('snippetsDir', file("build/generated-snippets"))
+	set('testcontainersVersion', '1.19.3')
 }
 
 dependencies {
+	// Testcontainers BOM
+	testImplementation platform("org.testcontainers:testcontainers-bom:${testcontainersVersion}")
+	
 	implementation 'org.springframework.boot:spring-boot-starter-batch'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jdbc'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -101,6 +105,12 @@ dependencies {
 	testImplementation 'org.springframework.integration:spring-integration-test'
 	testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
 	testImplementation 'org.springframework.security:spring-security-test'
+	
+	// Testcontainers dependencies
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:postgresql'
+	testImplementation 'org.testcontainers:testcontainers'
+	
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
