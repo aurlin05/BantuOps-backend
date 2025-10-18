@@ -171,21 +171,12 @@ public class RollbackMigrationService {
                 throw new IllegalArgumentException("Sauvegarde non trouvée: " + backupId);
             }
 
-            RollbackResult.EntityRollbackResult entityResult;
-
-            switch (entityType.toLowerCase()) {
-                case "employees":
-                    entityResult = rollbackEmployees(backup.getEmployees());
-                    break;
-                case "invoices":
-                    entityResult = rollbackInvoices(backup.getInvoices());
-                    break;
-                case "payroll_records":
-                    entityResult = rollbackPayrollRecords(backup.getPayrollRecords());
-                    break;
-                default:
-                    throw new IllegalArgumentException("Type d'entité non supporté: " + entityType);
-            }
+            RollbackResult.EntityRollbackResult entityResult = switch (entityType.toLowerCase()) {
+                case "employees" -> rollbackEmployees(backup.getEmployees());
+                case "invoices" -> rollbackInvoices(backup.getInvoices());
+                case "payroll_records" -> rollbackPayrollRecords(backup.getPayrollRecords());
+                default -> throw new IllegalArgumentException("Type d'entité non supporté: " + entityType);
+            };
 
             result.addEntityResult(entityType, entityResult);
             result.setEndTime(LocalDateTime.now());
@@ -432,7 +423,7 @@ public class RollbackMigrationService {
     /**
      * Supprime une sauvegarde
      */
-    public boolean deleteBackup(String backupId) {
+    public void deleteBackup(String backupId) {
         try {
             MigrationBackup removed = backupStorage.remove(backupId);
             if (removed != null) {
@@ -440,14 +431,11 @@ public class RollbackMigrationService {
                 auditService.logDataAccess("BACKUP_DELETED", "Sauvegarde supprimée",
                     Map.of("backupId", backupId)
             );
-                return true;
             } else {
                 log.warn("Sauvegarde {} non trouvée pour suppression", backupId);
-                return false;
             }
         } catch (Exception e) {
             log.error("Erreur lors de la suppression de la sauvegarde: {}", backupId, e);
-            return false;
         }
     }
 

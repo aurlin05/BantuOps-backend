@@ -43,7 +43,7 @@ public class HRManagementService {
 
     /**
      * Enregistre l'assiduité d'un employé avec validation des horaires
-     * Exigences: 3.1, 3.2, 3.3, 3.4
+     * Exigences : 3.1, 3.2, 3.3, 3.4
      */
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public AttendanceRecord recordAttendance(Long employeeId, AttendanceData attendanceData) {

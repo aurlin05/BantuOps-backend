@@ -29,7 +29,7 @@ public class ValidationMigrationService {
     private final BusinessRuleValidator businessRuleValidator;
     private final AuditService auditService;
 
-    // Patterns de validation pour les données sénégalaises
+    // Modèle de validation pour les données sénégalaises
     private static final Pattern SENEGAL_PHONE_PATTERN = Pattern.compile("^(\\+221|221)?[0-9]{8,9}$");
     private static final Pattern SENEGAL_TAX_NUMBER_PATTERN = Pattern.compile("^[0-9]{13}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
@@ -345,15 +345,15 @@ public class ValidationMigrationService {
             }
 
             // Validation spécifique selon le type de données
-            if (originalData instanceof Employee && migratedData instanceof Employee) {
-                return validateEmployeeIntegrity((Employee) originalData, (Employee) migratedData);
-            } else if (originalData instanceof Invoice && migratedData instanceof Invoice) {
-                return validateInvoiceIntegrity((Invoice) originalData, (Invoice) migratedData);
-            } else if (originalData instanceof PayrollRecord && migratedData instanceof PayrollRecord) {
-                return validatePayrollIntegrity((PayrollRecord) originalData, (PayrollRecord) migratedData);
-            }
-
-            return true;
+            return switch (originalData) {
+                case Employee employee when migratedData instanceof Employee ->
+                        validateEmployeeIntegrity(employee, (Employee) migratedData);
+                case Invoice invoice when migratedData instanceof Invoice ->
+                        validateInvoiceIntegrity(invoice, (Invoice) migratedData);
+                case PayrollRecord payrollRecord when migratedData instanceof PayrollRecord ->
+                        validatePayrollIntegrity(payrollRecord, (PayrollRecord) migratedData);
+                default -> true;
+            };
 
         } catch (Exception e) {
             log.error("Erreur lors de la validation de l'intégrité des données", e);
@@ -393,11 +393,12 @@ public class ValidationMigrationService {
      */
     public String generateValidationReport(int totalRecords, int validRecords, int invalidRecords) {
         return String.format(
-                "Rapport de validation de migration:\n" +
-                        "- Total des enregistrements: %d\n" +
-                        "- Enregistrements valides: %d\n" +
-                        "- Enregistrements invalides: %d\n" +
-                        "- Taux de validité: %.2f%%",
+                """
+                        Rapport de validation de migration:
+                        - Total des enregistrements: %d
+                        - Enregistrements valides: %d
+                        - Enregistrements invalides: %d
+                        - Taux de validité: %.2f%%""",
                 totalRecords, validRecords, invalidRecords,
                 totalRecords > 0 ? (validRecords * 100.0 / totalRecords) : 0.0);
     }

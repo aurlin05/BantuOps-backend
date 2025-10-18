@@ -130,22 +130,15 @@ public class ValidationService {
      * Valide et lance une exception si la validation échoue
      */
     public void validateAndThrow(Object request) {
-        ValidationResult result = null;
-        
-        if (request instanceof PayrollRequest) {
-            result = validatePayrollRequest((PayrollRequest) request);
-        } else if (request instanceof EmployeeRequest) {
-            result = validateEmployeeRequest((EmployeeRequest) request);
-        } else if (request instanceof InvoiceRequest) {
-            result = validateInvoiceRequest((InvoiceRequest) request);
-        } else if (request instanceof TransactionRequest) {
-            result = validateTransactionRequest((TransactionRequest) request);
-        } else if (request instanceof AttendanceRequest) {
-            result = validateAttendanceRequest((AttendanceRequest) request);
-        } else {
-            result = performBeanValidation(request);
-        }
-        
+        ValidationResult result = switch (request) {
+            case PayrollRequest payrollRequest -> validatePayrollRequest(payrollRequest);
+            case EmployeeRequest employeeRequest -> validateEmployeeRequest(employeeRequest);
+            case InvoiceRequest invoiceRequest -> validateInvoiceRequest(invoiceRequest);
+            case TransactionRequest transactionRequest -> validateTransactionRequest(transactionRequest);
+            case AttendanceRequest attendanceRequest -> validateAttendanceRequest(attendanceRequest);
+            case null, default -> performBeanValidation(request);
+        };
+
         if (!result.isValid()) {
             String errorMessage = "VALIDATION_FAILED: " + String.join("; ", result.getErrors());
             throw new BusinessRuleException(errorMessage);
