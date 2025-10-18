@@ -20,7 +20,8 @@ import java.time.YearMonth;
 import java.util.Optional;
 
 /**
- * Service de calcul de paie avec méthodes sécurisées selon la législation sénégalaise
+ * Service de calcul de paie avec méthodes sécurisées selon la législation
+ * sénégalaise
  * Conforme aux exigences 1.1, 1.2, 1.3, 3.1, 3.2 pour les calculs de paie
  */
 @Service
@@ -34,12 +35,10 @@ public class PayrollCalculationService {
     private final TaxCalculationService taxCalculationService;
     private final OvertimeCalculationService overtimeCalculationService;
     private final PayslipGenerationService payslipGenerationService;
-    private final BusinessRuleValidator businessRuleValidator;
     private final AuditService auditService;
 
     // Constantes pour les calculs sénégalais
     private static final BigDecimal HOURS_PER_MONTH = new BigDecimal("173.33"); // 40h/semaine * 52 semaines / 12 mois
-    private static final BigDecimal OVERTIME_THRESHOLD = new BigDecimal("173.33");
     private static final int CALCULATION_SCALE = 2;
 
     /**
@@ -49,7 +48,7 @@ public class PayrollCalculationService {
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public PayrollResult calculatePayroll(Long employeeId, YearMonth period) {
         log.info("Début du calcul de paie pour l'employé {} période {}", employeeId, period);
-        
+
         try {
             // Validation des permissions et des données
             Employee employee = validateAndGetEmployee(employeeId);
@@ -58,10 +57,10 @@ public class PayrollCalculationService {
 
             // Création du résultat de calcul
             PayrollResult result = PayrollResult.builder()
-                .employeeId(employeeId)
-                .period(period)
-                .baseSalary(employee.getBaseSalary())
-                .build();
+                    .employeeId(employeeId)
+                    .period(period)
+                    .baseSalary(employee.getBaseSalary())
+                    .build();
 
             // Calcul du salaire de base
             calculateBaseSalary(result, employee);
@@ -94,8 +93,8 @@ public class PayrollCalculationService {
             return result;
 
         } catch (Exception e) {
-            log.error("Erreur lors du calcul de paie pour l'employé {} période {}: {}", 
-                     employeeId, period, e.getMessage(), e);
+            log.error("Erreur lors du calcul de paie pour l'employé {} période {}: {}",
+                    employeeId, period, e.getMessage(), e);
             throw new PayrollCalculationException("Erreur lors du calcul de paie", e);
         }
     }
@@ -106,16 +105,16 @@ public class PayrollCalculationService {
      */
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public PayrollResult calculateSalary(Employee employee, WorkingHours hours) {
-        log.info("Calcul du salaire pour l'employé {} avec {} heures", 
+        log.info("Calcul du salaire pour l'employé {} avec {} heures",
                 employee.getId(), hours.getTotalHours());
 
         try {
             PayrollResult result = PayrollResult.builder()
-                .employeeId(employee.getId())
-                .baseSalary(employee.getBaseSalary())
-                .regularHours(hours.getRegularHours())
-                .overtimeHours(hours.getOvertimeHours())
-                .build();
+                    .employeeId(employee.getId())
+                    .baseSalary(employee.getBaseSalary())
+                    .regularHours(hours.getRegularHours())
+                    .overtimeHours(hours.getOvertimeHours())
+                    .build();
 
             // Calcul du salaire horaire
             BigDecimal hourlyRate = calculateHourlyRate(employee.getBaseSalary());
@@ -123,13 +122,13 @@ public class PayrollCalculationService {
 
             // Calcul du salaire pour les heures normales
             BigDecimal regularSalary = hourlyRate.multiply(hours.getRegularHours())
-                .setScale(CALCULATION_SCALE, RoundingMode.HALF_UP);
+                    .setScale(CALCULATION_SCALE, RoundingMode.HALF_UP);
             result.setRegularSalary(regularSalary);
 
             // Calcul des heures supplémentaires
             if (hours.getOvertimeHours().compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal overtimeAmount = overtimeCalculationService.calculateOvertime(
-                    hours.getOvertimeHours(), hourlyRate, employee);
+                        hours.getOvertimeHours(), hourlyRate, employee);
                 result.setOvertimeAmount(overtimeAmount);
             }
 
@@ -140,8 +139,8 @@ public class PayrollCalculationService {
             return result;
 
         } catch (Exception e) {
-            log.error("Erreur lors du calcul du salaire pour l'employé {}: {}", 
-                     employee.getId(), e.getMessage(), e);
+            log.error("Erreur lors du calcul du salaire pour l'employé {}: {}",
+                    employee.getId(), e.getMessage(), e);
             throw new PayrollCalculationException("Erreur lors du calcul du salaire", e);
         }
     }
@@ -152,7 +151,7 @@ public class PayrollCalculationService {
      */
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public PayslipDocument generatePayslip(PayrollResult result) {
-        log.info("Génération du bulletin de paie pour l'employé {} période {}", 
+        log.info("Génération du bulletin de paie pour l'employé {} période {}",
                 result.getEmployeeId(), result.getPeriod());
 
         try {
@@ -165,13 +164,13 @@ public class PayrollCalculationService {
             // Audit de la génération
             auditService.logPayslipGeneration(result.getEmployeeId(), result.getPeriod());
 
-            log.info("Bulletin de paie généré avec succès pour l'employé {} période {}", 
+            log.info("Bulletin de paie généré avec succès pour l'employé {} période {}",
                     result.getEmployeeId(), result.getPeriod());
             return payslip;
 
         } catch (Exception e) {
-            log.error("Erreur lors de la génération du bulletin pour l'employé {} période {}: {}", 
-                     result.getEmployeeId(), result.getPeriod(), e.getMessage(), e);
+            log.error("Erreur lors de la génération du bulletin pour l'employé {} période {}: {}",
+                    result.getEmployeeId(), result.getPeriod(), e.getMessage(), e);
             throw new PayrollCalculationException("Erreur lors de la génération du bulletin", e);
         }
     }
@@ -181,45 +180,45 @@ public class PayrollCalculationService {
      */
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public PayrollRecord savePayrollRecord(PayrollResult result) {
-        log.info("Sauvegarde de l'enregistrement de paie pour l'employé {} période {}", 
+        log.info("Sauvegarde de l'enregistrement de paie pour l'employé {} période {}",
                 result.getEmployeeId(), result.getPeriod());
 
         try {
             Employee employee = employeeRepository.findById(result.getEmployeeId())
-                .orElseThrow(() -> new BusinessRuleException("Employé non trouvé"));
+                    .orElseThrow(() -> new BusinessRuleException("Employé non trouvé"));
 
             PayrollRecord record = PayrollRecord.builder()
-                .employee(employee)
-                .payrollPeriod(result.getPeriod())
-                .baseSalary(result.getBaseSalary())
-                .grossSalary(result.getGrossSalary())
-                .netSalary(result.getNetSalary())
-                .regularHours(result.getRegularHours())
-                .overtimeHours(result.getOvertimeHours())
-                .overtimeAmount(result.getOvertimeAmount())
-                .performanceBonus(result.getPerformanceBonus())
-                .transportAllowance(result.getTransportAllowance())
-                .mealAllowance(result.getMealAllowance())
-                .housingAllowance(result.getHousingAllowance())
-                .otherAllowances(result.getOtherAllowances())
-                .incomeTax(result.getIncomeTax())
-                .ipresContribution(result.getIpresContribution())
-                .cssContribution(result.getCssContribution())
-                .familyAllowanceContribution(result.getFamilyAllowanceContribution())
-                .advanceDeduction(result.getAdvanceDeduction())
-                .loanDeduction(result.getLoanDeduction())
-                .absenceDeduction(result.getAbsenceDeduction())
-                .delayPenalty(result.getDelayPenalty())
-                .otherDeductions(result.getOtherDeductions())
-                .totalAllowances(result.getTotalAllowances())
-                .totalDeductions(result.getTotalDeductions())
-                .totalSocialContributions(result.getTotalSocialContributions())
-                .status(PayrollRecord.PayrollStatus.CALCULATED)
-                .processedDate(LocalDateTime.now())
-                .build();
+                    .employee(employee)
+                    .payrollPeriod(result.getPeriod())
+                    .baseSalary(result.getBaseSalary())
+                    .grossSalary(result.getGrossSalary())
+                    .netSalary(result.getNetSalary())
+                    .regularHours(result.getRegularHours())
+                    .overtimeHours(result.getOvertimeHours())
+                    .overtimeAmount(result.getOvertimeAmount())
+                    .performanceBonus(result.getPerformanceBonus())
+                    .transportAllowance(result.getTransportAllowance())
+                    .mealAllowance(result.getMealAllowance())
+                    .housingAllowance(result.getHousingAllowance())
+                    .otherAllowances(result.getOtherAllowances())
+                    .incomeTax(result.getIncomeTax())
+                    .ipresContribution(result.getIpresContribution())
+                    .cssContribution(result.getCssContribution())
+                    .familyAllowanceContribution(result.getFamilyAllowanceContribution())
+                    .advanceDeduction(result.getAdvanceDeduction())
+                    .loanDeduction(result.getLoanDeduction())
+                    .absenceDeduction(result.getAbsenceDeduction())
+                    .delayPenalty(result.getDelayPenalty())
+                    .otherDeductions(result.getOtherDeductions())
+                    .totalAllowances(result.getTotalAllowances())
+                    .totalDeductions(result.getTotalDeductions())
+                    .totalSocialContributions(result.getTotalSocialContributions())
+                    .status(PayrollRecord.PayrollStatus.CALCULATED)
+                    .processedDate(LocalDateTime.now())
+                    .build();
 
             PayrollRecord savedRecord = payrollRepository.save(record);
-            
+
             // Audit de la sauvegarde
             auditService.logPayrollRecordSaved(savedRecord.getId(), result.getEmployeeId());
 
@@ -236,12 +235,12 @@ public class PayrollCalculationService {
 
     private Employee validateAndGetEmployee(Long employeeId) {
         Employee employee = employeeRepository.findById(employeeId)
-            .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
-        
+                .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
+
         if (!employee.isCurrentlyEmployed()) {
             throw new BusinessRuleException("L'employé n'est plus actif");
         }
-        
+
         return employee;
     }
 
@@ -271,7 +270,7 @@ public class PayrollCalculationService {
     private void calculateOvertimeAmount(PayrollResult result) {
         if (result.getOvertimeHours() != null && result.getOvertimeHours().compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal overtimeAmount = overtimeCalculationService.calculateOvertime(
-                result.getOvertimeHours(), result.getHourlyRate(), null);
+                    result.getOvertimeHours(), result.getHourlyRate(), null);
             result.setOvertimeAmount(overtimeAmount);
         } else {
             result.setOvertimeAmount(BigDecimal.ZERO);
@@ -280,7 +279,7 @@ public class PayrollCalculationService {
 
     private void calculateAllowances(PayrollResult result) {
         BigDecimal totalAllowances = BigDecimal.ZERO;
-        
+
         if (result.getPerformanceBonus() != null) {
             totalAllowances = totalAllowances.add(result.getPerformanceBonus());
         }
@@ -296,36 +295,36 @@ public class PayrollCalculationService {
         if (result.getOtherAllowances() != null) {
             totalAllowances = totalAllowances.add(result.getOtherAllowances());
         }
-        
+
         result.setTotalAllowances(totalAllowances);
     }
 
     private void calculateGrossSalary(PayrollResult result) {
         BigDecimal grossSalary = result.getBaseSalary()
-            .add(result.getOvertimeAmount())
-            .add(result.getTotalAllowances());
+                .add(result.getOvertimeAmount())
+                .add(result.getTotalAllowances());
         result.setGrossSalary(grossSalary);
     }
 
     private void calculateTaxesAndContributions(PayrollResult result, Employee employee) {
         // Calcul des taxes selon la législation sénégalaise
         TaxCalculationResult taxResult = taxCalculationService.calculateTaxes(
-            result.getGrossSalary(), employee);
-        
+                result.getGrossSalary(), employee);
+
         result.setIncomeTax(taxResult.getIncomeTax());
         result.setIpresContribution(taxResult.getIpresContribution());
         result.setCssContribution(taxResult.getCssContribution());
         result.setFamilyAllowanceContribution(taxResult.getFamilyAllowanceContribution());
-        
+
         BigDecimal totalSocialContributions = taxResult.getIpresContribution()
-            .add(taxResult.getCssContribution())
-            .add(taxResult.getFamilyAllowanceContribution());
+                .add(taxResult.getCssContribution())
+                .add(taxResult.getFamilyAllowanceContribution());
         result.setTotalSocialContributions(totalSocialContributions);
     }
 
     private void calculateDeductions(PayrollResult result) {
         BigDecimal totalDeductions = BigDecimal.ZERO;
-        
+
         if (result.getAdvanceDeduction() != null) {
             totalDeductions = totalDeductions.add(result.getAdvanceDeduction());
         }
@@ -341,25 +340,25 @@ public class PayrollCalculationService {
         if (result.getOtherDeductions() != null) {
             totalDeductions = totalDeductions.add(result.getOtherDeductions());
         }
-        
+
         result.setTotalDeductions(totalDeductions);
     }
 
     private void calculateNetSalary(PayrollResult result) {
         BigDecimal netSalary = result.getGrossSalary()
-            .subtract(result.getIncomeTax())
-            .subtract(result.getTotalSocialContributions())
-            .subtract(result.getTotalDeductions());
-        
+                .subtract(result.getIncomeTax())
+                .subtract(result.getTotalSocialContributions())
+                .subtract(result.getTotalDeductions());
+
         if (netSalary.compareTo(BigDecimal.ZERO) < 0) {
             throw new PayrollCalculationException("Le salaire net ne peut pas être négatif");
         }
-        
+
         result.setNetSalary(netSalary);
     }
 
     private void validateCalculationResult(PayrollResult result) {
-        businessRuleValidator.validatePayrollCalculation(result);
+        validatePayrollResultBasic(result);
     }
 
     private void validatePayrollResult(PayrollResult result) {
@@ -375,5 +374,52 @@ public class PayrollCalculationService {
         if (result.getNetSalary() == null || result.getNetSalary().compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Le salaire net doit être positif");
         }
+    }
+
+    /**
+     * Basic validation for PayrollResult calculations
+     */
+    private void validatePayrollResultBasic(PayrollResult result) {
+        if (result == null) {
+            throw new PayrollCalculationException("Le résultat de calcul de paie ne peut pas être null");
+        }
+
+        // Validation du salaire de base
+        if (result.getBaseSalary() == null || result.getBaseSalary().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new PayrollCalculationException("Le salaire de base doit être positif");
+        }
+
+        // Validation du salaire brut
+        if (result.getGrossSalary() == null || result.getGrossSalary().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new PayrollCalculationException("Le salaire brut doit être positif");
+        }
+
+        // Validation du salaire net
+        if (result.getNetSalary() == null || result.getNetSalary().compareTo(BigDecimal.ZERO) < 0) {
+            throw new PayrollCalculationException("Le salaire net ne peut pas être négatif");
+        }
+
+        // Validation de la cohérence: salaire net <= salaire brut
+        if (result.getNetSalary().compareTo(result.getGrossSalary()) > 0) {
+            throw new PayrollCalculationException("Le salaire net ne peut pas être supérieur au salaire brut");
+        }
+
+        // Validation des heures supplémentaires
+        if (result.getOvertimeHours() != null && result.getOvertimeHours().compareTo(BigDecimal.ZERO) < 0) {
+            throw new PayrollCalculationException("Les heures supplémentaires ne peuvent pas être négatives");
+        }
+
+        // Validation des déductions
+        if (result.getTotalDeductions() != null && result.getTotalDeductions().compareTo(BigDecimal.ZERO) < 0) {
+            throw new PayrollCalculationException("Le total des déductions ne peut pas être négatif");
+        }
+
+        // Validation des cotisations sociales
+        if (result.getTotalSocialContributions() != null
+                && result.getTotalSocialContributions().compareTo(BigDecimal.ZERO) < 0) {
+            throw new PayrollCalculationException("Le total des cotisations sociales ne peut pas être négatif");
+        }
+
+        log.debug("Validation du résultat de calcul de paie réussie pour l'employé: {}", result.getEmployeeId());
     }
 }

@@ -65,7 +65,15 @@ public class SyncStatusMonitor {
         updateSyncMetrics(syncId, status);
         
         // Audit du changement de statut
-        auditService.logSyncStatusChange(syncId, status, timestamp);
+        auditService.logDataAccess(
+            "SYNC_STATUS_CHANGE",
+            "Changement de statut de synchronisation",
+            Map.of(
+                "syncId", syncId,
+                "status", status.toString(),
+                "timestamp", timestamp.toString()
+            )
+        );
         
         log.debug("Statut de synchronisation {} mis à jour vers {} à {}", syncId, status, timestamp);
     }
@@ -277,14 +285,21 @@ public class SyncStatusMonitor {
         
         // Mettre à jour les temps selon le statut
         switch (status) {
+            case PENDING:
+                // Statut initial, pas d'action spécifique
+                break;
             case IN_PROGRESS:
                 if (metrics.getStartTime() == null) {
                     metrics.setStartTime(LocalDateTime.now());
                 }
                 break;
+            case CONFLICT_DETECTED:
+                // Conflit détecté, mais synchronisation toujours en cours
+                break;
             case COMPLETED:
             case FAILED:
             case CANCELLED:
+            case PARTIAL_SUCCESS:
                 metrics.setEndTime(LocalDateTime.now());
                 if (metrics.getStartTime() != null) {
                     metrics.setDurationMs(Duration.between(metrics.getStartTime(), metrics.getEndTime()).toMillis());

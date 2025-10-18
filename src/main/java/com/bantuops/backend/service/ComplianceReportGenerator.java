@@ -36,9 +36,9 @@ public class ComplianceReportGenerator {
     /**
      * Génère un rapport d'audit complet pour une période donnée
      */
-    public ComplianceReport generateComplianceReport(LocalDateTime startDate, LocalDateTime endDate, 
-                                                   ReportType reportType) {
-        log.info("Génération du rapport de conformité du {} au {} - Type: {}", 
+    public ComplianceReport generateComplianceReport(LocalDateTime startDate, LocalDateTime endDate,
+            ReportType reportType) {
+        log.info("Génération du rapport de conformité du {} au {} - Type: {}",
                 startDate.format(FORMATTER), endDate.format(FORMATTER), reportType);
 
         ComplianceReport report = new ComplianceReport();
@@ -66,7 +66,7 @@ public class ComplianceReportGenerator {
                     throw new IllegalArgumentException("Type de rapport non supporté: " + reportType);
             }
 
-            log.info("Rapport de conformité généré avec succès - {} événements trouvés", 
+            log.info("Rapport de conformité généré avec succès - {} événements trouvés",
                     report.getTotalEvents());
             return report;
 
@@ -88,12 +88,15 @@ public class ComplianceReportGenerator {
 
         // Récupération des logs d'audit
         List<AuditLog> auditLogs = auditLogRepository.findByTimestampBetween(startDate, endDate);
-        
+
         // Récupération des changements de données
-        List<DataChangeHistory> dataChanges = dataChangeHistoryRepository.findByChangeTimestampBetween(startDate, endDate);
-        
+        List<DataChangeHistory> dataChanges = dataChangeHistoryRepository.findByChangeTimestampBetween(startDate,
+                endDate);
+
         // Récupération des audits au niveau des champs
-        List<FieldLevelAudit> fieldAudits = fieldLevelAuditRepository.findByAccessTimestampBetween(startDate, endDate, org.springframework.data.domain.Pageable.unpaged()).getContent();
+        List<FieldLevelAudit> fieldAudits = fieldLevelAuditRepository
+                .findByAccessTimestampBetween(startDate, endDate, org.springframework.data.domain.Pageable.unpaged())
+                .getContent();
 
         // Construction du rapport
         report.setAuditEvents(auditLogs);
@@ -129,7 +132,7 @@ public class ComplianceReportGenerator {
         // Analyse des patterns de changement
         Map<String, Long> changesByEntity = dataChanges.stream()
                 .collect(Collectors.groupingBy(DataChangeHistory::getEntityType, Collectors.counting()));
-        
+
         Map<String, Long> changesByUser = dataChanges.stream()
                 .collect(Collectors.groupingBy(DataChangeHistory::getChangedBy, Collectors.counting()));
 
@@ -161,9 +164,8 @@ public class ComplianceReportGenerator {
         // Analyse des événements de sécurité
         Map<String, Long> eventsByType = securityEvents.stream()
                 .collect(Collectors.groupingBy(
-                    audit -> audit.getAction().toString(), 
-                    Collectors.counting()
-                ));
+                        audit -> audit.getAction().toString(),
+                        Collectors.counting()));
 
         AuditStatistics stats = new AuditStatistics();
         stats.setSecurityEventsByType(eventsByType);
@@ -199,17 +201,16 @@ public class ComplianceReportGenerator {
     /**
      * Calcule les statistiques d'audit
      */
-    private AuditStatistics calculateAuditStatistics(List<AuditLog> auditLogs, 
-                                                   List<DataChangeHistory> dataChanges,
-                                                   List<FieldLevelAudit> fieldAudits) {
+    private AuditStatistics calculateAuditStatistics(List<AuditLog> auditLogs,
+            List<DataChangeHistory> dataChanges,
+            List<FieldLevelAudit> fieldAudits) {
         AuditStatistics stats = new AuditStatistics();
 
         // Statistiques des logs d'audit
         Map<String, Long> actionCounts = auditLogs.stream()
                 .collect(Collectors.groupingBy(
-                    audit -> audit.getAction().toString(), 
-                    Collectors.counting()
-                ));
+                        audit -> audit.getAction().toString(),
+                        Collectors.counting()));
         stats.setActionCounts(actionCounts);
 
         // Statistiques des changements de données
@@ -234,43 +235,40 @@ public class ComplianceReportGenerator {
         // Vérification 1: Accès non autorisés
         List<AuditLog> unauthorizedAccess = auditLogRepository
                 .findUnauthorizedAccessAttempts(startDate, endDate);
-        
+
         for (AuditLog log : unauthorizedAccess) {
             violations.add(new ComplianceViolation(
-                "UNAUTHORIZED_ACCESS",
-                "Tentative d'accès non autorisé détectée",
-                log.getTimestamp(),
-                log.getUserId(),
-                "HIGH"
-            ));
+                    "UNAUTHORIZED_ACCESS",
+                    "Tentative d'accès non autorisé détectée",
+                    log.getTimestamp(),
+                    log.getUserId(),
+                    "HIGH"));
         }
 
         // Vérification 2: Modifications de données sensibles sans justification
         List<DataChangeHistory> unjustifiedChanges = dataChangeHistoryRepository
                 .findUnjustifiedSensitiveDataChanges(startDate, endDate);
-        
+
         for (DataChangeHistory change : unjustifiedChanges) {
             violations.add(new ComplianceViolation(
-                "UNJUSTIFIED_SENSITIVE_CHANGE",
-                "Modification de données sensibles sans justification",
-                change.getChangeDate(),
-                change.getChangedBy(),
-                "MEDIUM"
-            ));
+                    "UNJUSTIFIED_SENSITIVE_CHANGE",
+                    "Modification de données sensibles sans justification",
+                    change.getChangeTimestamp(),
+                    change.getChangedBy(),
+                    "MEDIUM"));
         }
 
         // Vérification 3: Tentatives de suppression de logs d'audit
         List<AuditLog> auditDeletionAttempts = auditLogRepository
                 .findAuditDeletionAttempts(startDate, endDate);
-        
+
         for (AuditLog log : auditDeletionAttempts) {
             violations.add(new ComplianceViolation(
-                "AUDIT_TAMPERING",
-                "Tentative de suppression de logs d'audit",
-                log.getTimestamp(),
-                log.getUserId(),
-                "CRITICAL"
-            ));
+                    "AUDIT_TAMPERING",
+                    "Tentative de suppression de logs d'audit",
+                    log.getTimestamp(),
+                    log.getUserId(),
+                    "CRITICAL"));
         }
 
         return violations;
@@ -313,21 +311,20 @@ public class ComplianceReportGenerator {
             // Utilisation d'une bibliothèque JSON comme Jackson
             // Pour la simplicité, on retourne une représentation basique
             return String.format(
-                "{\n" +
-                "  \"reportType\": \"%s\",\n" +
-                "  \"startDate\": \"%s\",\n" +
-                "  \"endDate\": \"%s\",\n" +
-                "  \"generatedAt\": \"%s\",\n" +
-                "  \"totalEvents\": %d,\n" +
-                "  \"complianceScore\": %.2f\n" +
-                "}",
-                report.getReportType(),
-                report.getStartDate().format(FORMATTER),
-                report.getEndDate().format(FORMATTER),
-                report.getGeneratedAt().format(FORMATTER),
-                report.getTotalEvents(),
-                report.getStatistics() != null ? report.getStatistics().getComplianceScore() : 0.0
-            );
+                    "{\n" +
+                            "  \"reportType\": \"%s\",\n" +
+                            "  \"startDate\": \"%s\",\n" +
+                            "  \"endDate\": \"%s\",\n" +
+                            "  \"generatedAt\": \"%s\",\n" +
+                            "  \"totalEvents\": %d,\n" +
+                            "  \"complianceScore\": %.2f\n" +
+                            "}",
+                    report.getReportType(),
+                    report.getStartDate().format(FORMATTER),
+                    report.getEndDate().format(FORMATTER),
+                    report.getGeneratedAt().format(FORMATTER),
+                    report.getTotalEvents(),
+                    report.getStatistics() != null ? report.getStatistics().getComplianceScore() : 0.0);
         } catch (Exception e) {
             log.error("Erreur lors de l'export JSON du rapport: {}", e.getMessage());
             throw new RuntimeException("Échec de l'export JSON", e);
@@ -349,37 +346,85 @@ public class ComplianceReportGenerator {
         private AuditStatistics statistics;
 
         // Getters et setters
-        public ReportType getReportType() { return reportType; }
-        public void setReportType(ReportType reportType) { this.reportType = reportType; }
-        
-        public LocalDateTime getStartDate() { return startDate; }
-        public void setStartDate(LocalDateTime startDate) { this.startDate = startDate; }
-        
-        public LocalDateTime getEndDate() { return endDate; }
-        public void setEndDate(LocalDateTime endDate) { this.endDate = endDate; }
-        
-        public LocalDateTime getGeneratedAt() { return generatedAt; }
-        public void setGeneratedAt(LocalDateTime generatedAt) { this.generatedAt = generatedAt; }
-        
-        public int getTotalEvents() { return totalEvents; }
-        public void setTotalEvents(int totalEvents) { this.totalEvents = totalEvents; }
-        
-        public List<AuditLog> getAuditEvents() { return auditEvents; }
-        public void setAuditEvents(List<AuditLog> auditEvents) { this.auditEvents = auditEvents; }
-        
-        public List<DataChangeHistory> getDataChanges() { return dataChanges; }
-        public void setDataChanges(List<DataChangeHistory> dataChanges) { this.dataChanges = dataChanges; }
-        
-        public List<FieldLevelAudit> getFieldAudits() { return fieldAudits; }
-        public void setFieldAudits(List<FieldLevelAudit> fieldAudits) { this.fieldAudits = fieldAudits; }
-        
-        public List<ComplianceViolation> getComplianceViolations() { return complianceViolations; }
-        public void setComplianceViolations(List<ComplianceViolation> complianceViolations) { 
-            this.complianceViolations = complianceViolations; 
+        public ReportType getReportType() {
+            return reportType;
         }
-        
-        public AuditStatistics getStatistics() { return statistics; }
-        public void setStatistics(AuditStatistics statistics) { this.statistics = statistics; }
+
+        public void setReportType(ReportType reportType) {
+            this.reportType = reportType;
+        }
+
+        public LocalDateTime getStartDate() {
+            return startDate;
+        }
+
+        public void setStartDate(LocalDateTime startDate) {
+            this.startDate = startDate;
+        }
+
+        public LocalDateTime getEndDate() {
+            return endDate;
+        }
+
+        public void setEndDate(LocalDateTime endDate) {
+            this.endDate = endDate;
+        }
+
+        public LocalDateTime getGeneratedAt() {
+            return generatedAt;
+        }
+
+        public void setGeneratedAt(LocalDateTime generatedAt) {
+            this.generatedAt = generatedAt;
+        }
+
+        public int getTotalEvents() {
+            return totalEvents;
+        }
+
+        public void setTotalEvents(int totalEvents) {
+            this.totalEvents = totalEvents;
+        }
+
+        public List<AuditLog> getAuditEvents() {
+            return auditEvents;
+        }
+
+        public void setAuditEvents(List<AuditLog> auditEvents) {
+            this.auditEvents = auditEvents;
+        }
+
+        public List<DataChangeHistory> getDataChanges() {
+            return dataChanges;
+        }
+
+        public void setDataChanges(List<DataChangeHistory> dataChanges) {
+            this.dataChanges = dataChanges;
+        }
+
+        public List<FieldLevelAudit> getFieldAudits() {
+            return fieldAudits;
+        }
+
+        public void setFieldAudits(List<FieldLevelAudit> fieldAudits) {
+            this.fieldAudits = fieldAudits;
+        }
+
+        public List<ComplianceViolation> getComplianceViolations() {
+            return complianceViolations;
+        }
+
+        public void setComplianceViolations(List<ComplianceViolation> complianceViolations) {
+            this.complianceViolations = complianceViolations;
+        }
+
+        public AuditStatistics getStatistics() {
+            return statistics;
+        }
+
+        public void setStatistics(AuditStatistics statistics) {
+            this.statistics = statistics;
+        }
     }
 
     public static class AuditStatistics {
@@ -391,27 +436,53 @@ public class ComplianceReportGenerator {
         private double complianceScore = 100.0;
 
         // Getters et setters
-        public Map<String, Long> getActionCounts() { return actionCounts; }
-        public void setActionCounts(Map<String, Long> actionCounts) { this.actionCounts = actionCounts; }
-        
-        public Map<String, Long> getChangesByEntity() { return changesByEntity; }
-        public void setChangesByEntity(Map<String, Long> changesByEntity) { this.changesByEntity = changesByEntity; }
-        
-        public Map<String, Long> getChangesByUser() { return changesByUser; }
-        public void setChangesByUser(Map<String, Long> changesByUser) { this.changesByUser = changesByUser; }
-        
-        public Map<String, Long> getFieldChangesByEntity() { return fieldChangesByEntity; }
-        public void setFieldChangesByEntity(Map<String, Long> fieldChangesByEntity) { 
-            this.fieldChangesByEntity = fieldChangesByEntity; 
+        public Map<String, Long> getActionCounts() {
+            return actionCounts;
         }
-        
-        public Map<String, Long> getSecurityEventsByType() { return securityEventsByType; }
-        public void setSecurityEventsByType(Map<String, Long> securityEventsByType) { 
-            this.securityEventsByType = securityEventsByType; 
+
+        public void setActionCounts(Map<String, Long> actionCounts) {
+            this.actionCounts = actionCounts;
         }
-        
-        public double getComplianceScore() { return complianceScore; }
-        public void setComplianceScore(double complianceScore) { this.complianceScore = complianceScore; }
+
+        public Map<String, Long> getChangesByEntity() {
+            return changesByEntity;
+        }
+
+        public void setChangesByEntity(Map<String, Long> changesByEntity) {
+            this.changesByEntity = changesByEntity;
+        }
+
+        public Map<String, Long> getChangesByUser() {
+            return changesByUser;
+        }
+
+        public void setChangesByUser(Map<String, Long> changesByUser) {
+            this.changesByUser = changesByUser;
+        }
+
+        public Map<String, Long> getFieldChangesByEntity() {
+            return fieldChangesByEntity;
+        }
+
+        public void setFieldChangesByEntity(Map<String, Long> fieldChangesByEntity) {
+            this.fieldChangesByEntity = fieldChangesByEntity;
+        }
+
+        public Map<String, Long> getSecurityEventsByType() {
+            return securityEventsByType;
+        }
+
+        public void setSecurityEventsByType(Map<String, Long> securityEventsByType) {
+            this.securityEventsByType = securityEventsByType;
+        }
+
+        public double getComplianceScore() {
+            return complianceScore;
+        }
+
+        public void setComplianceScore(double complianceScore) {
+            this.complianceScore = complianceScore;
+        }
     }
 
     public static class ComplianceViolation {
@@ -421,8 +492,8 @@ public class ComplianceReportGenerator {
         private String userId;
         private String severity;
 
-        public ComplianceViolation(String violationType, String description, LocalDateTime timestamp, 
-                                 String userId, String severity) {
+        public ComplianceViolation(String violationType, String description, LocalDateTime timestamp,
+                String userId, String severity) {
             this.violationType = violationType;
             this.description = description;
             this.timestamp = timestamp;
@@ -431,20 +502,45 @@ public class ComplianceReportGenerator {
         }
 
         // Getters et setters
-        public String getViolationType() { return violationType; }
-        public void setViolationType(String violationType) { this.violationType = violationType; }
-        
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        
-        public LocalDateTime getTimestamp() { return timestamp; }
-        public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
-        
-        public String getUserId() { return userId; }
-        public void setUserId(String userId) { this.userId = userId; }
-        
-        public String getSeverity() { return severity; }
-        public void setSeverity(String severity) { this.severity = severity; }
+        public String getViolationType() {
+            return violationType;
+        }
+
+        public void setViolationType(String violationType) {
+            this.violationType = violationType;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
+
+        public LocalDateTime getTimestamp() {
+            return timestamp;
+        }
+
+        public void setTimestamp(LocalDateTime timestamp) {
+            this.timestamp = timestamp;
+        }
+
+        public String getUserId() {
+            return userId;
+        }
+
+        public void setUserId(String userId) {
+            this.userId = userId;
+        }
+
+        public String getSeverity() {
+            return severity;
+        }
+
+        public void setSeverity(String severity) {
+            this.severity = severity;
+        }
     }
 
     public enum ReportType {

@@ -11,15 +11,14 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
-import java.time.YearMonth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @TestPropertySource(properties = {
-    "spring.data.redis.host=localhost",
-    "spring.data.redis.port=6379",
-    "bantuops.node.id=test-node-1"
+        "spring.data.redis.host=localhost",
+        "spring.data.redis.port=6379",
+        "bantuops.node.id=test-node-1"
 })
 class RedisConfigTest {
 
@@ -41,22 +40,21 @@ class RedisConfigTest {
     @Test
     void shouldConfigureCacheManager() {
         assertThat(cacheManager).isNotNull();
-        
+
         // Verify expected caches are configured
         assertThat(cacheManager.getCacheNames()).contains(
-            "employees",
-            "payroll-calculations", 
-            "tax-rates",
-            "attendance-rules",
-            "user-permissions",
-            "financial-reports",
-            "invoices",
-            "system-config",
-            "frequent-calculations",
-            "session-metadata",
-            "business-rules",
-            "audit-cache"
-        );
+                "employees",
+                "payroll-calculations",
+                "tax-rates",
+                "attendance-rules",
+                "user-permissions",
+                "financial-reports",
+                "invoices",
+                "system-config",
+                "frequent-calculations",
+                "session-metadata",
+                "business-rules",
+                "audit-cache");
     }
 
     @Test
@@ -66,34 +64,32 @@ class RedisConfigTest {
     }
 
     @Test
-    void shouldCacheTaxCalculations() {
-        // Given
-        BigDecimal salary = new BigDecimal("100000");
-        YearMonth period = YearMonth.of(2024, 1);
-        
+    void shouldCacheSystemConfiguration() {
         // When - First call should calculate and cache
-        BigDecimal taxRate1 = cachedCalculationService.calculateTaxRate(salary, period);
-        
+        Object vatRate1 = cachedCalculationService.getSystemConfigCached("default.vat.rate");
+
         // Then - Second call should return cached value
-        BigDecimal taxRate2 = cachedCalculationService.calculateTaxRate(salary, period);
-        
-        assertThat(taxRate1).isEqualTo(taxRate2);
-        assertThat(taxRate1).isEqualTo(new BigDecimal("0.15")); // 15% for 100k salary
+        Object vatRate2 = cachedCalculationService.getSystemConfigCached("default.vat.rate");
+
+        assertThat(vatRate1).isEqualTo(vatRate2);
+        assertThat(vatRate1).isEqualTo(new BigDecimal("0.18")); // 18% VAT rate for Senegal
     }
 
     @Test
     void shouldCacheBusinessRules() {
         // When
-        var taxBrackets = cachedCalculationService.getSenegalTaxBrackets();
-        var vatRates = cachedCalculationService.getSenegalVATRates();
-        var overtimeRules = cachedCalculationService.getOvertimeRules();
-        
+        Object vatRate = cachedCalculationService.getSystemConfigCached("default.vat.rate");
+        Object minimumWage = cachedCalculationService.getSystemConfigCached("minimum.wage");
+        Object maxOvertimeHours = cachedCalculationService.getSystemConfigCached("max.overtime.hours");
+
         // Then
-        assertThat(taxBrackets).isNotNull();
-        assertThat(vatRates).isNotNull();
-        assertThat(overtimeRules).isNotNull();
-        
-        assertThat(vatRates.get("standard")).isEqualTo(new BigDecimal("0.18"));
+        assertThat(vatRate).isNotNull();
+        assertThat(minimumWage).isNotNull();
+        assertThat(maxOvertimeHours).isNotNull();
+
+        assertThat(vatRate).isEqualTo(new BigDecimal("0.18"));
+        assertThat(minimumWage).isEqualTo(new BigDecimal("60000"));
+        assertThat(maxOvertimeHours).isEqualTo(8);
     }
 
     @Test
@@ -102,14 +98,14 @@ class RedisConfigTest {
         String sessionId = "test-session-123";
         Long userId = 1L;
         String nodeId = "test-node-1";
-        
+
         // When
         distributedSessionService.registerDistributedSession(sessionId, userId, nodeId);
-        
+
         // Then
         assertThat(distributedSessionService.isSessionRegistered(sessionId)).isTrue();
         assertThat(distributedSessionService.getSessionNode(sessionId)).isEqualTo(nodeId);
-        
+
         // Cleanup
         distributedSessionService.unregisterDistributedSession(sessionId, userId);
         assertThat(distributedSessionService.isSessionRegistered(sessionId)).isFalse();
@@ -120,14 +116,14 @@ class RedisConfigTest {
         // Given
         String sessionId = "user-session-456";
         Long userId = 2L;
-        
+
         // When
         sessionManagementService.trackUserSession(userId, sessionId, "test-agent", "127.0.0.1");
-        
+
         // Then
         assertThat(sessionManagementService.isSessionActive(sessionId)).isTrue();
         assertThat(sessionManagementService.getUserActiveSessions(userId)).contains(sessionId);
-        
+
         // Cleanup
         sessionManagementService.untrackUserSession(userId, sessionId);
         assertThat(sessionManagementService.isSessionActive(sessionId)).isFalse();

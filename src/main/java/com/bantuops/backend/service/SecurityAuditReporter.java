@@ -71,7 +71,7 @@ public class SecurityAuditReporter {
             // Recommandations de sécurité
             report.setSecurityRecommendations(generateSecurityRecommendations(threatAnalysis));
 
-            log.info("Rapport d'audit de sécurité généré - ID: {}, Événements: {}, Alertes: {}", 
+            log.info("Rapport d'audit de sécurité généré - ID: {}, Événements: {}, Alertes: {}",
                     report.getReportId(), securityEvents.size(), securityAlerts.size());
 
             return report;
@@ -118,22 +118,21 @@ public class SecurityAuditReporter {
                 "LOGIN_ATTEMPT", "LOGIN_SUCCESS", "LOGIN_FAILURE", "LOGOUT",
                 "UNAUTHORIZED_ACCESS", "PERMISSION_DENIED", "DATA_ACCESS_VIOLATION",
                 "SUSPICIOUS_ACTIVITY", "SECURITY_BREACH", "PASSWORD_CHANGE",
-                "ROLE_CHANGE", "ACCOUNT_LOCKED", "ACCOUNT_UNLOCKED"
-        );
+                "ROLE_CHANGE", "ACCOUNT_LOCKED", "ACCOUNT_UNLOCKED");
 
         return auditLogRepository.findByTimestampBetween(startDate, endDate)
                 .stream()
                 .filter(log -> securityActions.contains(log.getAction().toString()) ||
-                              isSecurityRelatedEntity(log.getEntityType()) ||
-                              containsSecurityKeywords(log))
+                        isSecurityRelatedEntity(log.getEntityType()) ||
+                        containsSecurityKeywords(log))
                 .collect(Collectors.toList());
     }
 
     /**
      * Génère les alertes de sécurité basées sur les événements
      */
-    private List<SecurityAlert> generateSecurityAlerts(List<AuditLog> securityEvents, 
-                                                      LocalDateTime startDate, LocalDateTime endDate) {
+    private List<SecurityAlert> generateSecurityAlerts(List<AuditLog> securityEvents,
+            LocalDateTime startDate, LocalDateTime endDate) {
         List<SecurityAlert> alerts = new ArrayList<>();
 
         // Détection des tentatives de connexion échouées
@@ -170,7 +169,7 @@ public class SecurityAuditReporter {
                 .map(entry -> createSecurityAlert(
                         SecurityAlert.AlertType.FAILED_LOGIN_ATTEMPT,
                         SecurityAlert.Severity.HIGH,
-                        String.format("Tentatives de connexion échouées répétées pour l'utilisateur %s (%d tentatives)", 
+                        String.format("Tentatives de connexion échouées répétées pour l'utilisateur %s (%d tentatives)",
                                 entry.getKey(), entry.getValue().size()),
                         entry.getValue().get(0).getTimestamp(),
                         entry.getKey(),
@@ -181,9 +180,7 @@ public class SecurityAuditReporter {
                                 "ipAddresses", entry.getValue().stream()
                                         .map(AuditLog::getIpAddress)
                                         .distinct()
-                                        .collect(Collectors.toList())
-                        )
-                ))
+                                        .collect(Collectors.toList()))))
                 .collect(Collectors.toList());
     }
 
@@ -206,13 +203,12 @@ public class SecurityAuditReporter {
                 alerts.add(createSecurityAlert(
                         SecurityAlert.AlertType.ABNORMAL_ACTIVITY,
                         SecurityAlert.Severity.MEDIUM,
-                        String.format("Activité excessive détectée pour l'utilisateur %s (%d événements)", 
+                        String.format("Activité excessive détectée pour l'utilisateur %s (%d événements)",
                                 userId, userEventList.size()),
                         userEventList.get(0).getTimestamp(),
                         userId,
                         userEventList.get(0).getIpAddress(),
-                        Map.of("userId", userId, "eventCount", userEventList.size())
-                ));
+                        Map.of("userId", userId, "eventCount", userEventList.size())));
             }
 
             // Détection d'accès depuis plusieurs IP
@@ -229,8 +225,7 @@ public class SecurityAuditReporter {
                         userEventList.get(0).getTimestamp(),
                         userId,
                         userEventList.get(0).getIpAddress(),
-                        Map.of("userId", userId, "ipAddresses", uniqueIPs)
-                ));
+                        Map.of("userId", userId, "ipAddresses", uniqueIPs)));
             }
         }
 
@@ -245,9 +240,9 @@ public class SecurityAuditReporter {
 
         // Accès non autorisé aux données sensibles
         List<AuditLog> sensitiveDataAccess = events.stream()
-                .filter(log -> log.isSensitiveData() && 
-                              ("UNAUTHORIZED_ACCESS".equals(log.getAction().toString()) ||
-                               "PERMISSION_DENIED".equals(log.getAction().toString())))
+                .filter(log -> Boolean.TRUE.equals(log.getSensitiveData()) &&
+                        ("UNAUTHORIZED_ACCESS".equals(log.getAction().toString()) ||
+                                "PERMISSION_DENIED".equals(log.getAction().toString())))
                 .collect(Collectors.toList());
 
         if (!sensitiveDataAccess.isEmpty()) {
@@ -255,21 +250,20 @@ public class SecurityAuditReporter {
             alerts.add(createSecurityAlert(
                     SecurityAlert.AlertType.UNAUTHORIZED_ACCESS,
                     SecurityAlert.Severity.CRITICAL,
-                    String.format("Tentatives d'accès non autorisé aux données sensibles (%d événements)", 
+                    String.format("Tentatives d'accès non autorisé aux données sensibles (%d événements)",
                             sensitiveDataAccess.size()),
                     firstViolation.getTimestamp(),
                     firstViolation.getUserId(),
                     firstViolation.getIpAddress(),
-                    Map.of("violationCount", sensitiveDataAccess.size())
-            ));
+                    Map.of("violationCount", sensitiveDataAccess.size())));
         }
 
         // Volume élevé d'accès aux données
         Map<String, Long> dataAccessByUser = events.stream()
-                .filter(log -> log.getEntityType() != null && 
-                              (log.getEntityType().contains("Employee") || 
-                               log.getEntityType().contains("Payroll") ||
-                               log.getEntityType().contains("Financial")))
+                .filter(log -> log.getEntityType() != null &&
+                        (log.getEntityType().contains("Employee") ||
+                                log.getEntityType().contains("Payroll") ||
+                                log.getEntityType().contains("Financial")))
                 .collect(Collectors.groupingBy(AuditLog::getUserId, Collectors.counting()));
 
         dataAccessByUser.entrySet().stream()
@@ -280,17 +274,16 @@ public class SecurityAuditReporter {
                             .filter(log -> entry.getKey().equals(log.getUserId()))
                             .findFirst()
                             .orElse(null);
-                    
+
                     alerts.add(createSecurityAlert(
                             SecurityAlert.AlertType.DATA_EXPORT_VIOLATION,
                             SecurityAlert.Severity.HIGH,
-                            String.format("Volume élevé d'accès aux données par l'utilisateur %s (%d accès)", 
+                            String.format("Volume élevé d'accès aux données par l'utilisateur %s (%d accès)",
                                     entry.getKey(), entry.getValue()),
                             representativeEvent != null ? representativeEvent.getTimestamp() : LocalDateTime.now(),
                             entry.getKey(),
                             representativeEvent != null ? representativeEvent.getIpAddress() : null,
-                            Map.of("userId", entry.getKey(), "accessCount", entry.getValue())
-                    ));
+                            Map.of("userId", entry.getKey(), "accessCount", entry.getValue())));
                 });
 
         return alerts;
@@ -302,22 +295,20 @@ public class SecurityAuditReporter {
     private List<SecurityAlert> detectSuspiciousPermissionChanges(List<AuditLog> events) {
         return events.stream()
                 .filter(log -> "ROLE_CHANGE".equals(log.getAction().toString()) ||
-                              "PERMISSION_GRANTED".equals(log.getAction().toString()) ||
-                              "PERMISSION_REVOKED".equals(log.getAction().toString()))
+                        "PERMISSION_GRANTED".equals(log.getAction().toString()) ||
+                        "PERMISSION_REVOKED".equals(log.getAction().toString()))
                 .map(log -> createSecurityAlert(
                         SecurityAlert.AlertType.PRIVILEGE_ESCALATION,
                         SecurityAlert.Severity.HIGH,
-                        String.format("Changement de permissions détecté: %s pour l'utilisateur %s", 
+                        String.format("Changement de permissions détecté: %s pour l'utilisateur %s",
                                 log.getAction(), log.getUserId()),
                         log.getTimestamp(),
                         log.getUserId(),
                         log.getIpAddress(),
-                        Map.of(
+                        Map.<String, Object>of(
                                 "userId", log.getUserId(),
                                 "action", log.getAction().toString(),
-                                "changedBy", log.getLastModifiedBy() != null ? log.getLastModifiedBy() : "SYSTEM"
-                        )
-                ))
+                                "changedBy", log.getUserId() != null ? log.getUserId() : "SYSTEM")))
                 .collect(Collectors.toList());
     }
 
@@ -331,13 +322,12 @@ public class SecurityAuditReporter {
                 .map(log -> createSecurityAlert(
                         SecurityAlert.AlertType.ABNORMAL_ACTIVITY,
                         SecurityAlert.Severity.MEDIUM,
-                        String.format("Accès hors heures détecté: %s par l'utilisateur %s", 
+                        String.format("Accès hors heures détecté: %s par l'utilisateur %s",
                                 log.getAction(), log.getUserId()),
                         log.getTimestamp(),
                         log.getUserId(),
                         log.getIpAddress(),
-                        Map.of("userId", log.getUserId(), "action", log.getAction().toString())
-                ))
+                        Map.of("userId", log.getUserId(), "action", log.getAction().toString())))
                 .collect(Collectors.toList());
     }
 
@@ -389,16 +379,14 @@ public class SecurityAuditReporter {
         Map<String, Long> alertsBySeverity = alerts.stream()
                 .collect(Collectors.groupingBy(
                         alert -> alert.getSeverity().toString(),
-                        Collectors.counting()
-                ));
+                        Collectors.counting()));
         metrics.put("alertsBySeverity", alertsBySeverity);
 
         // Métriques par type d'alerte
         Map<String, Long> alertsByType = alerts.stream()
                 .collect(Collectors.groupingBy(
-                        alert -> alert.getType().toString(),
-                        Collectors.counting()
-                ));
+                        alert -> alert.getAlertType().toString(),
+                        Collectors.counting()));
         metrics.put("alertsByType", alertsByType);
 
         // Métriques temporelles
@@ -426,8 +414,8 @@ public class SecurityAuditReporter {
     // ==================== MÉTHODES UTILITAIRES ====================
 
     private SecurityAlert createSecurityAlert(SecurityAlert.AlertType alertType, SecurityAlert.Severity severity,
-                                             String description, LocalDateTime timestamp, String userId, 
-                                             String ipAddress, Map<String, Object> metadata) {
+            String description, LocalDateTime timestamp, String userId,
+            String ipAddress, Map<String, Object> metadata) {
         return SecurityAlert.builder()
                 .alertType(alertType)
                 .severity(severity)
@@ -441,13 +429,14 @@ public class SecurityAuditReporter {
     }
 
     private boolean isSecurityRelatedEntity(String entityType) {
-        if (entityType == null) return false;
-        return entityType.contains("User") || entityType.contains("Role") || 
-               entityType.contains("Permission") || entityType.contains("Security");
+        if (entityType == null)
+            return false;
+        return entityType.contains("User") || entityType.contains("Role") ||
+                entityType.contains("Permission") || entityType.contains("Security");
     }
 
     private boolean containsSecurityKeywords(AuditLog log) {
-        String[] securityKeywords = {"password", "login", "auth", "security", "permission", "role"};
+        String[] securityKeywords = { "password", "login", "auth", "security", "permission", "role" };
         String logContent = (log.getOldValues() + " " + log.getNewValues()).toLowerCase();
         return Arrays.stream(securityKeywords).anyMatch(logContent::contains);
     }
@@ -473,9 +462,12 @@ public class SecurityAuditReporter {
                 .mapToLong(alert -> alert.getSeverity() == SecurityAlert.Severity.HIGH ? 1 : 0)
                 .sum();
 
-        if (criticalAlerts > 0) return ThreatAnalysis.ThreatLevel.CRITICAL;
-        if (highAlerts > 3) return ThreatAnalysis.ThreatLevel.HIGH;
-        if (alerts.size() > 10) return ThreatAnalysis.ThreatLevel.MEDIUM;
+        if (criticalAlerts > 0)
+            return ThreatAnalysis.ThreatLevel.CRITICAL;
+        if (highAlerts > 3)
+            return ThreatAnalysis.ThreatLevel.HIGH;
+        if (alerts.size() > 10)
+            return ThreatAnalysis.ThreatLevel.MEDIUM;
         return ThreatAnalysis.ThreatLevel.LOW;
     }
 
@@ -594,7 +586,7 @@ public class SecurityAuditReporter {
     }
 
     private void processImmediateSecurityAlert(SecurityAlert alert) {
-        log.warn("ALERTE SÉCURITÉ CRITIQUE: {}", alert.getMessage());
+        log.warn("ALERTE SÉCURITÉ CRITIQUE: {}", alert.getFormattedDescription());
         // TODO: Implémenter les actions automatiques (notifications, blocages, etc.)
     }
 

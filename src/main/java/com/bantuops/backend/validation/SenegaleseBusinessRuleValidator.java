@@ -30,7 +30,7 @@ public class SenegaleseBusinessRuleValidator implements ConstraintValidator<Sene
             return true;
         }
 
-        BusinessRuleValidator.ValidationResult result = null;
+        ValidationResult result = null;
 
         switch (ruleType) {
             case PAYROLL:
@@ -65,13 +65,13 @@ public class SenegaleseBusinessRuleValidator implements ConstraintValidator<Sene
         if (result != null && !result.isValid()) {
             // Désactiver le message par défaut
             context.disableDefaultConstraintViolation();
-            
+
             // Ajouter les erreurs spécifiques
             for (String error : result.getErrors()) {
                 context.buildConstraintViolationWithTemplate(error)
-                    .addConstraintViolation();
+                        .addConstraintViolation();
             }
-            
+
             return false;
         }
 

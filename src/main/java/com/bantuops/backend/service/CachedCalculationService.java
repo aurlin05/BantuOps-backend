@@ -1,8 +1,9 @@
 package com.bantuops.backend.service;
 
 import com.bantuops.backend.dto.PayrollResult;
-import com.bantuops.backend.dto.TaxCalculation;
-import com.bantuops.backend.dto.VATCalculation;
+import com.bantuops.backend.dto.TaxCalculationResult;
+import com.bantuops.backend.dto.VATCalculationResult;
+import com.bantuops.backend.dto.VATCalculationRequest;
 import com.bantuops.backend.entity.Employee;
 import com.bantuops.backend.entity.AttendanceRecord;
 import lombok.RequiredArgsConstructor;
@@ -37,22 +38,24 @@ public class CachedCalculationService {
      * Cache les calculs de taxes avec clé composite
      */
     @Cacheable(value = "tax-calculations", 
-               key = "#salary.toString() + '_' + #period.toString() + '_' + #employeeType",
+               key = "#salary.toString() + '_' + #employee.id.toString()",
                condition = "#salary != null && #salary.compareTo(T(java.math.BigDecimal).ZERO) > 0")
-    public TaxCalculation calculateTaxCached(BigDecimal salary, YearMonth period, String employeeType) {
-        log.debug("Calculating tax for salary: {}, period: {}, type: {}", salary, period, employeeType);
-        return taxCalculationService.calculateTaxes(salary, period, employeeType);
+    public TaxCalculationResult calculateTaxCached(BigDecimal salary, Employee employee) {
+        log.debug("Calculating tax for salary: {}, employee: {}", salary, employee.getId());
+        return taxCalculationService.calculateTaxes(salary, employee);
     }
 
     /**
      * Cache les données d'employé avec leurs informations détaillées
+     * Note: This method would need an EmployeeService dependency
      */
     @Cacheable(value = "employees", 
                key = "#employeeId",
                unless = "#result == null")
     public Employee getEmployeeWithDetailsCached(Long employeeId) {
         log.debug("Fetching employee details for ID: {}", employeeId);
-        return employeeService.getEmployeeWithDetails(employeeId);
+        // This would require an EmployeeService dependency
+        throw new UnsupportedOperationException("EmployeeService not available - method needs implementation");
     }
 
     /**
@@ -70,32 +73,36 @@ public class CachedCalculationService {
      * Cache les calculs de TVA
      */
     @Cacheable(value = "frequent-calculations",
-               key = "'vat_' + #amount.toString() + '_' + #vatRate.toString()",
-               condition = "#amount != null && #amount.compareTo(T(java.math.BigDecimal).ZERO) > 0")
-    public VATCalculation calculateVATCached(BigDecimal amount, BigDecimal vatRate) {
-        log.debug("Calculating VAT for amount: {}, rate: {}", amount, vatRate);
-        return vatCalculationService.calculateVAT(amount, vatRate);
+               key = "'vat_' + #request.hashCode()",
+               condition = "#request != null && #request.amountExcludingVat != null")
+    public VATCalculationResult calculateVATCached(VATCalculationRequest request) {
+        log.debug("Calculating VAT for request: {}", request);
+        return vatCalculationService.calculateVAT(request);
     }
 
     /**
      * Cache les règles d'assiduité par département
+     * Note: This method would need an AttendanceService dependency
      */
     @Cacheable(value = "attendance-rules",
                key = "#department + '_' + #contractType",
                unless = "#result == null || #result.isEmpty()")
     public Map<String, Object> getAttendanceRulesCached(String department, String contractType) {
         log.debug("Fetching attendance rules for department: {}, contract: {}", department, contractType);
-        return attendanceService.getAttendanceRules(department, contractType);
+        // This would require an AttendanceService dependency
+        throw new UnsupportedOperationException("AttendanceService not available - method needs implementation");
     }
 
     /**
      * Cache les données d'assiduité pour une période
+     * Note: This method would need an AttendanceService dependency
      */
     @Cacheable(value = "frequent-calculations",
                key = "'attendance_' + #employeeId + '_' + #startDate.toString() + '_' + #endDate.toString()")
     public List<AttendanceRecord> getAttendanceRecordsCached(Long employeeId, LocalDate startDate, LocalDate endDate) {
         log.debug("Fetching attendance records for employee: {} from {} to {}", employeeId, startDate, endDate);
-        return attendanceService.getAttendanceRecords(employeeId, startDate, endDate);
+        // This would require an AttendanceService dependency
+        throw new UnsupportedOperationException("AttendanceService not available - method needs implementation");
     }
 
     /**

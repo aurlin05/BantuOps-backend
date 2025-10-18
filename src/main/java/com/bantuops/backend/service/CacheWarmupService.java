@@ -27,7 +27,6 @@ public class CacheWarmupService {
 
     private final CachedCalculationService cachedCalculationService;
     private final EmployeeRepository employeeRepository;
-    private final TaxCalculationService taxCalculationService;
 
     /**
      * Pré-chargement automatique au démarrage de l'application
@@ -75,7 +74,7 @@ public class CacheWarmupService {
             try {
                 log.debug("Warming up employee cache...");
                 
-                List<Employee> activeEmployees = employeeRepository.findByIsActiveTrue();
+                List<Employee> activeEmployees = employeeRepository.findActiveEmployeesPaginated(1000, 0);
                 log.info("Found {} active employees for cache warmup", activeEmployees.size());
 
                 for (Employee employee : activeEmployees) {
@@ -117,23 +116,27 @@ public class CacheWarmupService {
                     BigDecimal.valueOf(2000000)  // Salaire direction
                 };
 
-                String[] employeeTypes = {"PERMANENT", "CONTRACT", "INTERN"};
-                YearMonth currentPeriod = YearMonth.now();
-                YearMonth previousPeriod = currentPeriod.minusMonths(1);
-
+                // Get some sample employees for tax calculation warmup
+                List<Employee> sampleEmployees = employeeRepository.findActiveEmployeesPaginated(10, 0);
+                
                 int cacheCount = 0;
                 for (BigDecimal salary : commonSalaries) {
-                    for (String employeeType : employeeTypes) {
+                    for (Employee employee : sampleEmployees) {
                         try {
-                            // Charger pour le mois actuel et précédent
-                            cachedCalculationService.calculateTaxCached(salary, currentPeriod, employeeType);
-                            cachedCalculationService.calculateTaxCached(salary, previousPeriod, employeeType);
-                            cacheCount += 2;
+                            // Create a temporary employee with the test salary for cache warmup
+                            Employee tempEmployee = Employee.builder()
+                                .id(employee.getId())
+                                .employeeNumber(employee.getEmployeeNumber())
+                                .baseSalary(salary)
+                                .build();
+                            
+                            cachedCalculationService.calculateTaxCached(salary, tempEmployee);
+                            cacheCount++;
                             
                             Thread.sleep(5);
                         } catch (Exception e) {
-                            log.warn("Failed to warm up tax cache for salary {} and type {}: {}", 
-                                    salary, employeeType, e.getMessage());
+                            log.warn("Failed to warm up tax cache for salary {} and employee {}: {}", 
+                                    salary, employee.getId(), e.getMessage());
                         }
                     }
                 }
@@ -299,7 +302,7 @@ public class CacheWarmupService {
             try {
                 log.debug("Warming up cache for payroll period: {}", period);
                 
-                List<Employee> activeEmployees = employeeRepository.findByIsActiveTrue();
+                List<Employee> activeEmployees = employeeRepository.findActiveEmployeesPaginated(1000, 0);
                 
                 for (Employee employee : activeEmployees) {
                     try {

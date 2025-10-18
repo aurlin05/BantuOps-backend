@@ -2,7 +2,6 @@ package com.bantuops.backend.service;
 
 import com.bantuops.backend.dto.SecurityAlert;
 import com.bantuops.backend.entity.AuditLog;
-import com.bantuops.backend.entity.User;
 import com.bantuops.backend.repository.AuditLogRepository;
 import com.bantuops.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -83,8 +82,8 @@ public class SuspiciousActivityDetector {
             }
 
             if (isSuspicious) {
-                log.warn("Activité suspecte détectée pour l'utilisateur: {} - Type: {}", 
-                    alert.getUserId(), alert.getAlertType());
+                log.warn("Activité suspecte détectée pour l'utilisateur: {} - Type: {}",
+                        alert.getUserId(), alert.getAlertType());
                 updateSuspiciousActivityCounter(alert.getUserId());
             }
 
@@ -107,16 +106,16 @@ public class SuspiciousActivityDetector {
         long failedAttempts = auditLogRepository.countFailedLoginAttempts(userId, since);
 
         if (failedAttempts >= MAX_FAILED_LOGINS_PER_HOUR) {
-            log.warn("Trop de tentatives de connexion échouées: {} pour l'utilisateur: {}", 
-                failedAttempts, userId);
+            log.warn("Trop de tentatives de connexion échouées: {} pour l'utilisateur: {}",
+                    failedAttempts, userId);
             return true;
         }
 
         // Vérifier si les tentatives viennent de différentes IP
         List<String> ipAddresses = auditLogRepository.getFailedLoginIpAddresses(userId, since);
         if (ipAddresses.size() > 3) {
-            log.warn("Tentatives de connexion depuis {} IP différentes pour l'utilisateur: {}", 
-                ipAddresses.size(), userId);
+            log.warn("Tentatives de connexion depuis {} IP différentes pour l'utilisateur: {}",
+                    ipAddresses.size(), userId);
             return true;
         }
 
@@ -134,16 +133,16 @@ public class SuspiciousActivityDetector {
         long unauthorizedAttempts = auditLogRepository.countUnauthorizedAccess(userId, since);
 
         if (unauthorizedAttempts >= 10) {
-            log.warn("Trop de tentatives d'accès non autorisé: {} pour l'utilisateur: {}", 
-                unauthorizedAttempts, userId);
+            log.warn("Trop de tentatives d'accès non autorisé: {} pour l'utilisateur: {}",
+                    unauthorizedAttempts, userId);
             return true;
         }
 
         // Vérifier si l'utilisateur tente d'accéder à des ressources sensibles
         String resource = (String) alert.getMetadata().get("resource");
         if (isSensitiveResource(resource)) {
-            log.warn("Tentative d'accès à une ressource sensible: {} par l'utilisateur: {}", 
-                resource, userId);
+            log.warn("Tentative d'accès à une ressource sensible: {} par l'utilisateur: {}",
+                    resource, userId);
             return true;
         }
 
@@ -161,8 +160,8 @@ public class SuspiciousActivityDetector {
         long modifications = auditLogRepository.countSensitiveDataModifications(userId, since);
 
         if (modifications >= 50) {
-            log.warn("Trop de modifications de données sensibles: {} par l'utilisateur: {}", 
-                modifications, userId);
+            log.warn("Trop de modifications de données sensibles: {} par l'utilisateur: {}",
+                    modifications, userId);
             return true;
         }
 
@@ -208,8 +207,8 @@ public class SuspiciousActivityDetector {
 
         // Vérifier si l'activité est en dehors des heures habituelles
         if (!pattern.isNormalActivityTime(alertTime)) {
-            log.warn("Activité en dehors des heures habituelles pour l'utilisateur: {} à {}", 
-                userId, alertTime);
+            log.warn("Activité en dehors des heures habituelles pour l'utilisateur: {} à {}",
+                    userId, alertTime);
             return true;
         }
 
@@ -228,18 +227,18 @@ public class SuspiciousActivityDetector {
         }
 
         // Récupérer les IP habituelles de l'utilisateur
-        List<String> usualIps = auditLogRepository.getUserUsualIpAddresses(userId, 
-            LocalDateTime.now().minusDays(30));
+        List<String> usualIps = auditLogRepository.getUserUsualIpAddresses(userId,
+                LocalDateTime.now().minusDays(30));
 
         // Vérifier si l'IP est nouvelle
         if (!usualIps.contains(currentIp)) {
-            log.warn("Connexion depuis une nouvelle IP: {} pour l'utilisateur: {}", 
-                currentIp, userId);
-            
+            log.warn("Connexion depuis une nouvelle IP: {} pour l'utilisateur: {}",
+                    currentIp, userId);
+
             // Vérifier si c'est une IP suspecte (exemple: TOR, VPN connus, etc.)
             if (isSuspiciousIp(currentIp)) {
-                log.warn("Connexion depuis une IP suspecte: {} pour l'utilisateur: {}", 
-                    currentIp, userId);
+                log.warn("Connexion depuis une IP suspecte: {} pour l'utilisateur: {}",
+                        currentIp, userId);
                 return true;
             }
         }
@@ -252,13 +251,41 @@ public class SuspiciousActivityDetector {
      */
     private boolean analyzeBehavioralPattern(SecurityAlert alert) {
         String userId = alert.getUserId();
-        
+
         // Récupérer le pattern comportemental de l'utilisateur
         UserActivityPattern pattern = getUserActivityPattern(userId);
-        
+
         // Analyser la fréquence d'activité
         if (pattern.isActivityFrequencyAbnormal(alert)) {
             log.warn("Fréquence d'activité anormale pour l'utilisateur: {}", userId);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Analyse générale pour les types d'alertes non spécifiques
+     */
+    private boolean analyzeGeneralPattern(SecurityAlert alert) {
+        String userId = alert.getUserId();
+
+        // Vérifier la fréquence générale d'alertes pour cet utilisateur
+        LocalDateTime since = LocalDateTime.now().minusHours(1);
+        // Utiliser une méthode existante ou simplifier la logique
+        List<AuditLog> recentActivity = auditLogRepository.getUserRecentActivity(userId, since);
+        long recentAlerts = recentActivity.size();
+
+        if (recentAlerts >= 20) {
+            log.warn("Trop d'alertes de sécurité récentes: {} pour l'utilisateur: {}",
+                    recentAlerts, userId);
+            return true;
+        }
+
+        // Vérifier si l'utilisateur a un historique d'activités suspectes
+        UserActivityPattern pattern = getUserActivityPattern(userId);
+        if (pattern.suspiciousActivityCount > 5) {
+            log.warn("Utilisateur avec historique d'activités suspectes: {}", userId);
             return true;
         }
 
@@ -299,14 +326,15 @@ public class SuspiciousActivityDetector {
      * Analyse l'accès inhabituel aux données
      */
     private boolean analyzeUnusualDataAccess(String userId, SecurityAlert alert) {
-        // Vérifier si l'utilisateur accède à des données qu'il ne consulte pas habituellement
-        List<String> usualResources = auditLogRepository.getUserUsualResources(userId, 
-            LocalDateTime.now().minusDays(30));
+        // Vérifier si l'utilisateur accède à des données qu'il ne consulte pas
+        // habituellement
+        List<String> usualResources = auditLogRepository.getUserUsualResources(userId,
+                LocalDateTime.now().minusDays(30));
 
         String resource = (String) alert.getMetadata().get("resource");
         if (resource != null && !usualResources.contains(resource)) {
-            log.warn("Accès à une ressource inhabituelle: {} par l'utilisateur: {}", 
-                resource, userId);
+            log.warn("Accès à une ressource inhabituelle: {} par l'utilisateur: {}",
+                    resource, userId);
             return true;
         }
 
@@ -319,8 +347,8 @@ public class SuspiciousActivityDetector {
     private UserActivityPattern getUserActivityPattern(String userId) {
         return userPatterns.computeIfAbsent(userId, id -> {
             // Analyser l'historique d'activité pour créer le pattern
-            List<AuditLog> recentActivity = auditLogRepository.getUserRecentActivity(id, 
-                LocalDateTime.now().minusDays(30));
+            List<AuditLog> recentActivity = auditLogRepository.getUserRecentActivity(id,
+                    LocalDateTime.now().minusDays(30));
             return new UserActivityPattern(id, recentActivity);
         });
     }
@@ -337,13 +365,13 @@ public class SuspiciousActivityDetector {
      * Vérifie si une ressource est sensible
      */
     private boolean isSensitiveResource(String resource) {
-        if (resource == null) return false;
-        
+        if (resource == null)
+            return false;
+
         Set<String> sensitiveResources = Set.of(
-            "/api/payroll", "/api/financial", "/api/admin", 
-            "/api/reports", "/api/export", "/api/users"
-        );
-        
+                "/api/payroll", "/api/financial", "/api/admin",
+                "/api/reports", "/api/export", "/api/users");
+
         return sensitiveResources.stream().anyMatch(resource::startsWith);
     }
 
@@ -351,7 +379,8 @@ public class SuspiciousActivityDetector {
      * Vérifie si une IP est suspecte
      */
     private boolean isSuspiciousIp(String ip) {
-        // Implémentation basique - dans un vrai système, utiliser des services de géolocalisation
+        // Implémentation basique - dans un vrai système, utiliser des services de
+        // géolocalisation
         // et des listes d'IP suspectes
         return ip.startsWith("10.0.0.") || ip.startsWith("192.168.") || ip.equals("127.0.0.1");
     }
@@ -368,10 +397,10 @@ public class SuspiciousActivityDetector {
         public UserActivityPattern(String userId, List<AuditLog> recentActivity) {
             this.userId = userId;
             this.usualActivityTimes = recentActivity.stream()
-                .map(log -> log.getTimestamp().toLocalTime())
-                .toList();
+                    .map(log -> log.getTimestamp().toLocalTime())
+                    .toList();
             this.resourceAccessFrequency = new ConcurrentHashMap<>();
-            
+
             // Analyser la fréquence d'accès aux ressources
             recentActivity.forEach(log -> {
                 String resource = log.getEntityType();
@@ -381,7 +410,7 @@ public class SuspiciousActivityDetector {
 
         public boolean isNormalActivityTime(LocalDateTime time) {
             LocalTime timeOfDay = time.toLocalTime();
-            
+
             // Vérifier si l'heure est dans la plage normale d'activité
             return timeOfDay.isAfter(NORMAL_WORK_START) && timeOfDay.isBefore(NORMAL_WORK_END);
         }

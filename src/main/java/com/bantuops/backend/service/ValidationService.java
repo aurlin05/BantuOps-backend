@@ -147,8 +147,8 @@ public class ValidationService {
         }
         
         if (!result.isValid()) {
-            String errorMessage = String.join("; ", result.getErrors());
-            throw new BusinessRuleException("VALIDATION_FAILED", errorMessage);
+            String errorMessage = "VALIDATION_FAILED: " + String.join("; ", result.getErrors());
+            throw new BusinessRuleException(errorMessage);
         }
     }
 

@@ -22,7 +22,7 @@ public class CacheEvictionService {
     @Scheduled(fixedRate = 3600000) // 1 hour
     public void scheduledCacheCleanup() {
         log.debug("Starting scheduled cache cleanup");
-        
+
         try {
             // Clear expired entries (Redis handles this automatically, but we can log it)
             log.debug("Cache cleanup completed");
@@ -36,13 +36,13 @@ public class CacheEvictionService {
      */
     public void clearAllCaches() {
         log.info("Clearing all caches");
-        
+
         try {
             cacheManager.getCacheNames().forEach(cacheName -> {
                 Objects.requireNonNull(cacheManager.getCache(cacheName)).clear();
                 log.debug("Cleared cache: {}", cacheName);
             });
-            
+
             log.info("All caches cleared successfully");
         } catch (Exception e) {
             log.error("Failed to clear all caches", e);
@@ -54,7 +54,7 @@ public class CacheEvictionService {
      */
     public void clearCache(String cacheName) {
         log.info("Clearing cache: {}", cacheName);
-        
+
         try {
             var cache = cacheManager.getCache(cacheName);
             if (cache != null) {
@@ -73,9 +73,17 @@ public class CacheEvictionService {
      */
     public void onEmployeeDataChanged(Long employeeId) {
         log.debug("Employee data changed, evicting related caches for employee: {}", employeeId);
-        
-        cachedCalculationService.evictEmployeeCache(employeeId);
-        cachedCalculationService.evictPayrollCache(employeeId);
+
+        cachedCalculationService.evictAllEmployeeRelatedCaches(employeeId);
+    }
+
+    /**
+     * Evict payroll cache for specific employee and period
+     */
+    public void onPayrollDataChanged(Long employeeId, java.time.YearMonth period) {
+        log.debug("Payroll data changed for employee: {}, period: {}", employeeId, period);
+
+        cachedCalculationService.evictPayrollCache(employeeId, period);
     }
 
     /**
@@ -83,8 +91,9 @@ public class CacheEvictionService {
      */
     public void onUserPermissionsChanged(Long userId) {
         log.debug("User permissions changed, evicting cache for user: {}", userId);
-        
-        cachedCalculationService.evictUserPermissionsCache(userId);
+
+        // Clear user-related caches - would need specific implementation
+        clearCache("user-permissions");
     }
 
     /**
@@ -92,7 +101,7 @@ public class CacheEvictionService {
      */
     public void onAttendanceRulesChanged() {
         log.debug("Attendance rules changed, evicting related caches");
-        
+
         cachedCalculationService.evictAttendanceRulesCache();
     }
 
@@ -101,10 +110,10 @@ public class CacheEvictionService {
      */
     public void onPayrollRulesChanged() {
         log.debug("Payroll rules changed, evicting payroll calculation caches");
-        
-        cachedCalculationService.evictAllPayrollCache();
-        cachedCalculationService.evictBusinessRulesCache();
-        clearCache("tax-rates");
+
+        cachedCalculationService.evictTaxRatesCache();
+        clearCache("payroll-calculations");
+        clearCache("tax-calculations");
         clearCache("business-rules");
     }
 
@@ -113,8 +122,7 @@ public class CacheEvictionService {
      */
     public void onFrequentDataChanged() {
         log.debug("Frequent data changed, evicting frequent calculations cache");
-        
-        cachedCalculationService.evictFrequentCalculationsCache();
+
         clearCache("frequent-calculations");
     }
 
@@ -123,7 +131,7 @@ public class CacheEvictionService {
      */
     public void onSessionDataChanged() {
         log.debug("Session data changed, evicting session-related caches");
-        
+
         clearCache("session-metadata");
     }
 
@@ -132,7 +140,7 @@ public class CacheEvictionService {
      */
     public void onAuditDataChanged() {
         log.debug("Audit data changed, evicting audit caches");
-        
+
         clearCache("audit-cache");
     }
 
@@ -141,7 +149,7 @@ public class CacheEvictionService {
      */
     public void logCacheStatistics() {
         log.info("=== Cache Statistics ===");
-        
+
         cacheManager.getCacheNames().forEach(cacheName -> {
             var cache = cacheManager.getCache(cacheName);
             if (cache != null) {
@@ -149,7 +157,7 @@ public class CacheEvictionService {
                 log.info("Cache '{}' is active", cacheName);
             }
         });
-        
+
         log.info("=== End Cache Statistics ===");
     }
 }

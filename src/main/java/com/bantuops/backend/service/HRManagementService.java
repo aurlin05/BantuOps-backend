@@ -2,6 +2,7 @@ package com.bantuops.backend.service;
 
 import com.bantuops.backend.dto.AbsenceRequest;
 import com.bantuops.backend.dto.AttendanceData;
+import com.bantuops.backend.dto.AttendanceRequest;
 import com.bantuops.backend.dto.DelayCalculation;
 import com.bantuops.backend.entity.AttendanceRecord;
 import com.bantuops.backend.entity.AttendanceViolation;
@@ -26,7 +27,8 @@ import java.util.Optional;
 
 /**
  * Service de gestion RH avec méthodes sécurisées pour l'assiduité
- * Conforme aux exigences 3.1, 3.2, 3.3, 3.4 pour la gestion des retards et absences
+ * Conforme aux exigences 3.1, 3.2, 3.3, 3.4 pour la gestion des retards et
+ * absences
  */
 @Service
 @Transactional
@@ -45,12 +47,12 @@ public class HRManagementService {
      */
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public AttendanceRecord recordAttendance(Long employeeId, AttendanceData attendanceData) {
-        log.info("Enregistrement de l'assiduité pour l'employé ID: {}, date: {}", 
+        log.info("Enregistrement de l'assiduité pour l'employé ID: {}, date: {}",
                 employeeId, attendanceData.getWorkDate());
 
         // Validation de l'employé
         Employee employee = employeeRepository.findById(employeeId)
-            .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
+                .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
 
         if (!employee.isCurrentlyEmployed()) {
             throw new BusinessRuleException("Impossible d'enregistrer l'assiduité pour un employé inactif");
@@ -62,20 +64,21 @@ public class HRManagementService {
         }
 
         // Validation des données d'assiduité
-        businessRuleValidator.validateAttendanceData(attendanceData);
+        AttendanceRequest attendanceRequest = convertToAttendanceRequest(attendanceData, employee);
+        businessRuleValidator.validateAttendanceData(attendanceRequest);
 
         // Création de l'enregistrement d'assiduité
         AttendanceRecord attendanceRecord = AttendanceRecord.builder()
-            .employee(employee)
-            .workDate(attendanceData.getWorkDate())
-            .scheduledStartTime(parseTime(employee.getWorkStartTime()))
-            .scheduledEndTime(parseTime(employee.getWorkEndTime()))
-            .actualStartTime(attendanceData.getActualStartTime())
-            .actualEndTime(attendanceData.getActualEndTime())
-            .attendanceType(determineAttendanceType(attendanceData))
-            .justification(attendanceData.getJustification())
-            .status(AttendanceRecord.AttendanceStatus.PENDING)
-            .build();
+                .employee(employee)
+                .workDate(attendanceData.getWorkDate())
+                .scheduledStartTime(parseTime(employee.getWorkStartTime()))
+                .scheduledEndTime(parseTime(employee.getWorkEndTime()))
+                .actualStartTime(attendanceData.getActualStartTime())
+                .actualEndTime(attendanceData.getActualEndTime())
+                .attendanceType(determineAttendanceType(attendanceData))
+                .justification(attendanceData.getJustification())
+                .status(AttendanceRecord.AttendanceStatus.PENDING)
+                .build();
 
         // Calcul des retards et heures travaillées
         calculateAttendanceMetrics(attendanceRecord);
@@ -86,7 +89,7 @@ public class HRManagementService {
         // Audit
         auditService.logAttendanceRecord(employeeId, savedRecord.getId(), "ATTENDANCE_RECORDED");
 
-        log.info("Assiduité enregistrée avec succès pour l'employé ID: {}, record ID: {}", 
+        log.info("Assiduité enregistrée avec succès pour l'employé ID: {}, record ID: {}",
                 employeeId, savedRecord.getId());
 
         return savedRecord;
@@ -101,16 +104,16 @@ public class HRManagementService {
 
         if (record.getActualStartTime() == null || record.getScheduledStartTime() == null) {
             return DelayCalculation.builder()
-                .employeeId(record.getEmployee().getId())
-                .employeeNumber(record.getEmployee().getEmployeeNumber())
-                .employeeName(record.getEmployee().getFullName())
-                .scheduledStartTime(record.getScheduledStartTime())
-                .actualStartTime(record.getActualStartTime())
-                .delayMinutes(0)
-                .delayCategory("NONE")
-                .requiresJustification(false)
-                .requiresApproval(false)
-                .build();
+                    .employeeId(record.getEmployee().getId())
+                    .employeeNumber(record.getEmployee().getEmployeeNumber())
+                    .employeeName(record.getEmployee().getFullName())
+                    .scheduledStartTime(record.getScheduledStartTime())
+                    .actualStartTime(record.getActualStartTime())
+                    .delayMinutes(0)
+                    .delayCategory("NONE")
+                    .requiresJustification(false)
+                    .requiresApproval(false)
+                    .build();
         }
 
         // Calcul du retard en minutes
@@ -119,43 +122,45 @@ public class HRManagementService {
 
         if (delayMinutes <= 0) {
             return DelayCalculation.builder()
+                    .employeeId(record.getEmployee().getId())
+                    .employeeNumber(record.getEmployee().getEmployeeNumber())
+                    .employeeName(record.getEmployee().getFullName())
+                    .scheduledStartTime(record.getScheduledStartTime())
+                    .actualStartTime(record.getActualStartTime())
+                    .delayMinutes(0)
+                    .delayCategory("NONE")
+                    .requiresJustification(false)
+                    .requiresApproval(false)
+                    .build();
+        }
+
+        // Application des règles de tolérance (5 minutes de grâce par défaut)
+        int toleranceMinutes = schedule != null && schedule.getFlexibilityMinutes() != null
+                ? schedule.getFlexibilityMinutes()
+                : 5;
+        int effectiveDelay = Math.max(0, delayMinutes - toleranceMinutes);
+
+        // Calcul de la pénalité selon les règles configurées
+        java.math.BigDecimal penaltyAmount = calculateDelayPenalty(effectiveDelay,
+                record.getEmployee().getBaseSalary());
+
+        // Détermination de la catégorie de retard
+        String delayCategory = determineDelayCategory(effectiveDelay);
+
+        return DelayCalculation.builder()
                 .employeeId(record.getEmployee().getId())
                 .employeeNumber(record.getEmployee().getEmployeeNumber())
                 .employeeName(record.getEmployee().getFullName())
                 .scheduledStartTime(record.getScheduledStartTime())
                 .actualStartTime(record.getActualStartTime())
-                .delayMinutes(0)
-                .delayCategory("NONE")
-                .requiresJustification(false)
-                .requiresApproval(false)
+                .delayMinutes(effectiveDelay)
+                .delayCategory(delayCategory)
+                .penaltyAmount(penaltyAmount)
+                .requiresJustification(effectiveDelay > 15)
+                .requiresApproval(effectiveDelay > 30)
+                .applicableRule("Règlement intérieur - Article sur les retards")
+                .recommendedAction(getRecommendedAction(delayCategory))
                 .build();
-        }
-
-        // Application des règles de tolérance (5 minutes de grâce par défaut)
-        int toleranceMinutes = schedule != null && schedule.getFlexibilityMinutes() != null ? 
-            schedule.getFlexibilityMinutes() : 5;
-        int effectiveDelay = Math.max(0, delayMinutes - toleranceMinutes);
-
-        // Calcul de la pénalité selon les règles configurées
-        java.math.BigDecimal penaltyAmount = calculateDelayPenalty(effectiveDelay, record.getEmployee().getBaseSalary());
-
-        // Détermination de la catégorie de retard
-        String delayCategory = determineDelayCategory(effectiveDelay);
-        
-        return DelayCalculation.builder()
-            .employeeId(record.getEmployee().getId())
-            .employeeNumber(record.getEmployee().getEmployeeNumber())
-            .employeeName(record.getEmployee().getFullName())
-            .scheduledStartTime(record.getScheduledStartTime())
-            .actualStartTime(record.getActualStartTime())
-            .delayMinutes(effectiveDelay)
-            .delayCategory(delayCategory)
-            .penaltyAmount(penaltyAmount)
-            .requiresJustification(effectiveDelay > 15)
-            .requiresApproval(effectiveDelay > 30)
-            .applicableRule("Règlement intérieur - Article sur les retards")
-            .recommendedAction(getRecommendedAction(delayCategory))
-            .build();
     }
 
     /**
@@ -164,19 +169,19 @@ public class HRManagementService {
      */
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public AttendanceRecord recordAbsence(Long employeeId, AbsenceRequest absenceRequest) {
-        log.info("Enregistrement d'absence pour l'employé ID: {}, date: {}, type: {}", 
+        log.info("Enregistrement d'absence pour l'employé ID: {}, date: {}, type: {}",
                 employeeId, absenceRequest.getStartDate(), absenceRequest.getAbsenceType());
 
         // Validation de l'employé
         Employee employee = employeeRepository.findById(employeeId)
-            .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
+                .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
 
-        // Validation de la demande d'absence
-        businessRuleValidator.validateAbsenceRequest(absenceRequest);
+        // Validation de la demande d'absence (validation basique)
+        validateAbsenceRequestBasic(absenceRequest);
 
         // Vérification de l'existence d'un enregistrement pour cette date
         Optional<AttendanceRecord> existingRecord = attendanceRepository
-            .findByEmployeeIdAndWorkDate(employeeId, absenceRequest.getStartDate());
+                .findByEmployeeIdAndWorkDate(employeeId, absenceRequest.getStartDate());
 
         AttendanceRecord attendanceRecord;
         if (existingRecord.isPresent()) {
@@ -190,17 +195,17 @@ public class HRManagementService {
         } else {
             // Création d'un nouvel enregistrement
             attendanceRecord = AttendanceRecord.builder()
-                .employee(employee)
-                .workDate(absenceRequest.getStartDate())
-                .scheduledStartTime(parseTime(employee.getWorkStartTime()))
-                .scheduledEndTime(parseTime(employee.getWorkEndTime()))
-                .attendanceType(AttendanceRecord.AttendanceType.ABSENT)
-                .absenceType(mapAbsenceType(absenceRequest.getAbsenceType()))
-                .justification(absenceRequest.getReason())
-                .isPaidAbsence(absenceRequest.getIsPaidAbsence())
-                .status(AttendanceRecord.AttendanceStatus.PENDING)
-                .totalHoursWorked(0.0)
-                .build();
+                    .employee(employee)
+                    .workDate(absenceRequest.getStartDate())
+                    .scheduledStartTime(parseTime(employee.getWorkStartTime()))
+                    .scheduledEndTime(parseTime(employee.getWorkEndTime()))
+                    .attendanceType(AttendanceRecord.AttendanceType.ABSENT)
+                    .absenceType(mapAbsenceType(absenceRequest.getAbsenceType()))
+                    .justification(absenceRequest.getReason())
+                    .isPaidAbsence(absenceRequest.getIsPaidAbsence())
+                    .status(AttendanceRecord.AttendanceStatus.PENDING)
+                    .totalHoursWorked(0.0)
+                    .build();
         }
 
         // Sauvegarde
@@ -209,7 +214,7 @@ public class HRManagementService {
         // Audit
         auditService.logAttendanceRecord(employeeId, savedRecord.getId(), "ABSENCE_RECORDED");
 
-        log.info("Absence enregistrée avec succès pour l'employé ID: {}, record ID: {}", 
+        log.info("Absence enregistrée avec succès pour l'employé ID: {}, record ID: {}",
                 employeeId, savedRecord.getId());
 
         return savedRecord;
@@ -227,12 +232,12 @@ public class HRManagementService {
 
         // Récupération de l'enregistrement d'assiduité
         Optional<AttendanceRecord> recordOpt = attendanceRepository.findByEmployeeIdAndWorkDate(employeeId, date);
-        
+
         if (recordOpt.isEmpty()) {
             // Absence non justifiée
-            violations.add(createViolation(employeeId, date, 
-                AttendanceViolation.ViolationType.UNAUTHORIZED_ABSENCE,
-                "Absence non déclarée"));
+            violations.add(createViolation(employeeId, date,
+                    AttendanceViolation.ViolationType.UNAUTHORIZED_ABSENCE,
+                    "Absence non déclarée"));
             return violations;
         }
 
@@ -250,7 +255,7 @@ public class HRManagementService {
         // Vérification des heures supplémentaires non autorisées
         checkUnauthorizedOvertime(record, violations);
 
-        log.debug("Vérification terminée. {} violations trouvées pour l'employé ID: {}", 
+        log.debug("Vérification terminée. {} violations trouvées pour l'employé ID: {}",
                 violations.size(), employeeId);
 
         return violations;
@@ -262,13 +267,12 @@ public class HRManagementService {
         if (attendanceData.getActualStartTime() == null && attendanceData.getActualEndTime() == null) {
             return AttendanceRecord.AttendanceType.ABSENT;
         }
-        
+
         if (attendanceData.getActualStartTime() != null && attendanceData.getActualEndTime() != null) {
             // Vérifier si c'est une demi-journée
             Duration workedDuration = Duration.between(
-                attendanceData.getActualStartTime(), 
-                attendanceData.getActualEndTime()
-            );
+                    attendanceData.getActualStartTime(),
+                    attendanceData.getActualEndTime());
             if (workedDuration.toHours() < 4) {
                 return AttendanceRecord.AttendanceType.HALF_DAY;
             }
@@ -281,26 +285,23 @@ public class HRManagementService {
         if (record.getActualStartTime() != null && record.getActualEndTime() != null) {
             // Calcul des heures travaillées
             Duration workedDuration = Duration.between(
-                record.getActualStartTime(), 
-                record.getActualEndTime()
-            );
+                    record.getActualStartTime(),
+                    record.getActualEndTime());
             record.setTotalHoursWorked(workedDuration.toMinutes() / 60.0);
 
             // Calcul du retard
             if (record.getScheduledStartTime() != null) {
                 Duration delay = Duration.between(
-                    record.getScheduledStartTime(), 
-                    record.getActualStartTime()
-                );
+                        record.getScheduledStartTime(),
+                        record.getActualStartTime());
                 record.setDelayMinutes(Math.max(0, (int) delay.toMinutes()));
             }
 
             // Calcul du départ anticipé
             if (record.getScheduledEndTime() != null) {
                 Duration earlyDeparture = Duration.between(
-                    record.getActualEndTime(),
-                    record.getScheduledEndTime()
-                );
+                        record.getActualEndTime(),
+                        record.getScheduledEndTime());
                 record.setEarlyDepartureMinutes(Math.max(0, (int) earlyDeparture.toMinutes()));
             }
 
@@ -332,9 +333,12 @@ public class HRManagementService {
         // Calcul de la pénalité: 1/30 du salaire journalier par heure de retard
         // Salaire journalier = salaire mensuel / 22 jours ouvrables
         // Salaire horaire = salaire journalier / 8 heures
-        java.math.BigDecimal dailySalary = baseSalary.divide(java.math.BigDecimal.valueOf(22), 2, java.math.RoundingMode.HALF_UP);
-        java.math.BigDecimal hourlySalary = dailySalary.divide(java.math.BigDecimal.valueOf(8), 2, java.math.RoundingMode.HALF_UP);
-        java.math.BigDecimal penaltyRate = hourlySalary.divide(java.math.BigDecimal.valueOf(60), 2, java.math.RoundingMode.HALF_UP);
+        java.math.BigDecimal dailySalary = baseSalary.divide(java.math.BigDecimal.valueOf(22), 2,
+                java.math.RoundingMode.HALF_UP);
+        java.math.BigDecimal hourlySalary = dailySalary.divide(java.math.BigDecimal.valueOf(8), 2,
+                java.math.RoundingMode.HALF_UP);
+        java.math.BigDecimal penaltyRate = hourlySalary.divide(java.math.BigDecimal.valueOf(60), 2,
+                java.math.RoundingMode.HALF_UP);
 
         return penaltyRate.multiply(java.math.BigDecimal.valueOf(delayMinutes));
     }
@@ -364,17 +368,17 @@ public class HRManagementService {
         // Vérifier les retards des 30 derniers jours
         LocalDate startDate = date.minusDays(30);
         List<AttendanceRecord> recentRecords = attendanceRepository
-            .findByEmployeeIdAndWorkDateBetween(employeeId, startDate, date);
+                .findByEmployeeIdAndWorkDateBetween(employeeId, startDate, date);
 
         long delayCount = recentRecords.stream()
-            .filter(record -> record.getDelayMinutes() != null && record.getDelayMinutes() > 0)
-            .count();
+                .filter(record -> record.getDelayMinutes() != null && record.getDelayMinutes() > 0)
+                .count();
 
         // Seuil: plus de 5 retards en 30 jours
         if (delayCount > 5) {
             violations.add(createViolation(employeeId, date,
-                AttendanceViolation.ViolationType.PATTERN_VIOLATION,
-                String.format("Retards répétés: %d retards en 30 jours", delayCount)));
+                    AttendanceViolation.ViolationType.PATTERN_VIOLATION,
+                    String.format("Retards répétés: %d retards en 30 jours", delayCount)));
         }
     }
 
@@ -382,30 +386,30 @@ public class HRManagementService {
         // Vérifier les absences des 90 derniers jours
         LocalDate startDate = date.minusDays(90);
         List<AttendanceRecord> recentRecords = attendanceRepository
-            .findByEmployeeIdAndWorkDateBetween(employeeId, startDate, date);
+                .findByEmployeeIdAndWorkDateBetween(employeeId, startDate, date);
 
         long absenceCount = recentRecords.stream()
-            .filter(record -> record.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT)
-            .count();
+                .filter(record -> record.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT)
+                .count();
 
         // Seuil: plus de 10 absences en 90 jours
         if (absenceCount > 10) {
             violations.add(createViolation(employeeId, date,
-                AttendanceViolation.ViolationType.PATTERN_VIOLATION,
-                String.format("Absences fréquentes: %d absences en 90 jours", absenceCount)));
+                    AttendanceViolation.ViolationType.PATTERN_VIOLATION,
+                    String.format("Absences fréquentes: %d absences en 90 jours", absenceCount)));
         }
     }
 
     private void checkMissingJustifications(AttendanceRecord record, List<AttendanceViolation> violations) {
         boolean needsJustification = record.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
-                                   record.getAttendanceType() == AttendanceRecord.AttendanceType.LATE ||
-                                   (record.getDelayMinutes() != null && record.getDelayMinutes() > 30);
+                record.getAttendanceType() == AttendanceRecord.AttendanceType.LATE ||
+                (record.getDelayMinutes() != null && record.getDelayMinutes() > 30);
 
-        if (needsJustification && 
-            (record.getJustification() == null || record.getJustification().trim().isEmpty())) {
+        if (needsJustification &&
+                (record.getJustification() == null || record.getJustification().trim().isEmpty())) {
             violations.add(createViolation(record.getEmployee().getId(), record.getWorkDate(),
-                AttendanceViolation.ViolationType.MISSING_JUSTIFICATION,
-                "Justification manquante pour " + record.getAttendanceType().getDescription()));
+                    AttendanceViolation.ViolationType.MISSING_JUSTIFICATION,
+                    "Justification manquante pour " + record.getAttendanceType().getDescription()));
         }
     }
 
@@ -413,24 +417,24 @@ public class HRManagementService {
         if (record.getOvertimeHours() != null && record.getOvertimeHours() > 2.0) {
             // Plus de 2h supplémentaires sans autorisation préalable
             violations.add(createViolation(record.getEmployee().getId(), record.getWorkDate(),
-                AttendanceViolation.ViolationType.POLICY_BREACH,
-                String.format("Heures supplémentaires non autorisées: %.1fh", record.getOvertimeHours())));
+                    AttendanceViolation.ViolationType.POLICY_BREACH,
+                    String.format("Heures supplémentaires non autorisées: %.1fh", record.getOvertimeHours())));
         }
     }
 
-    private AttendanceViolation createViolation(Long employeeId, LocalDate date, 
-                                              AttendanceViolation.ViolationType type, String description) {
+    private AttendanceViolation createViolation(Long employeeId, LocalDate date,
+            AttendanceViolation.ViolationType type, String description) {
         Employee employee = employeeRepository.findById(employeeId)
-            .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
-            
+                .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
+
         return AttendanceViolation.builder()
-            .employee(employee)
-            .violationDate(date)
-            .violationType(type)
-            .description(description)
-            .severityLevel(determineSeverity(type))
-            .status(AttendanceViolation.ViolationStatus.ACTIVE)
-            .build();
+                .employee(employee)
+                .violationDate(date)
+                .violationType(type)
+                .description(description)
+                .severityLevel(determineSeverity(type))
+                .status(AttendanceViolation.ViolationStatus.ACTIVE)
+                .build();
     }
 
     private AttendanceViolation.SeverityLevel determineSeverity(AttendanceViolation.ViolationType type) {
@@ -446,7 +450,7 @@ public class HRManagementService {
         if (absenceTypeString == null) {
             return AttendanceRecord.AbsenceType.OTHER;
         }
-        
+
         return switch (absenceTypeString) {
             case "SICK_LEAVE" -> AttendanceRecord.AbsenceType.SICK_LEAVE;
             case "ANNUAL_LEAVE" -> AttendanceRecord.AbsenceType.ANNUAL_LEAVE;
@@ -458,5 +462,61 @@ public class HRManagementService {
             case "MISSION" -> AttendanceRecord.AbsenceType.MISSION;
             default -> AttendanceRecord.AbsenceType.OTHER;
         };
+    }
+
+    /**
+     * Converts AttendanceData to AttendanceRequest for validation
+     */
+    private AttendanceRequest convertToAttendanceRequest(AttendanceData attendanceData, Employee employee) {
+        return AttendanceRequest.builder()
+                .employeeId(employee.getId())
+                .workDate(attendanceData.getWorkDate())
+                .scheduledStartTime(parseTime(employee.getWorkStartTime()))
+                .scheduledEndTime(parseTime(employee.getWorkEndTime()))
+                .actualStartTime(attendanceData.getActualStartTime())
+                .actualEndTime(attendanceData.getActualEndTime())
+                .attendanceType(attendanceData.getAttendanceType())
+                .delayMinutes(calculateDelayMinutes(attendanceData, employee))
+                .build();
+    }
+
+    /**
+     * Basic validation for absence requests
+     */
+    private void validateAbsenceRequestBasic(AbsenceRequest absenceRequest) {
+        if (absenceRequest == null) {
+            throw new BusinessRuleException("La demande d'absence est obligatoire");
+        }
+
+        if (absenceRequest.getStartDate() == null) {
+            throw new BusinessRuleException("La date de début d'absence est obligatoire");
+        }
+
+        if (absenceRequest.getStartDate().isAfter(LocalDate.now())) {
+            throw new BusinessRuleException("La date d'absence ne peut pas être dans le futur");
+        }
+
+        if (absenceRequest.getAbsenceType() == null || absenceRequest.getAbsenceType().trim().isEmpty()) {
+            throw new BusinessRuleException("Le type d'absence est obligatoire");
+        }
+
+        // Additional business rules can be added here
+    }
+
+    /**
+     * Calculate delay minutes from attendance data
+     */
+    private Integer calculateDelayMinutes(AttendanceData attendanceData, Employee employee) {
+        if (attendanceData.getActualStartTime() == null) {
+            return null;
+        }
+
+        LocalTime scheduledStart = parseTime(employee.getWorkStartTime());
+        if (scheduledStart == null) {
+            return null;
+        }
+
+        Duration delay = Duration.between(scheduledStart, attendanceData.getActualStartTime());
+        return Math.max(0, (int) delay.toMinutes());
     }
 }

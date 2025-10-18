@@ -3,7 +3,7 @@ package com.bantuops.backend.service;
 import com.bantuops.backend.dto.AttendanceReport;
 import com.bantuops.backend.entity.AttendanceRecord;
 import com.bantuops.backend.entity.Employee;
-import com.bantuops.backend.exception.BusinessRuleException;
+
 import com.bantuops.backend.repository.AttendanceRepository;
 import com.bantuops.backend.repository.EmployeeRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
+
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -33,7 +33,6 @@ public class HRReportService {
 
     private final AttendanceRepository attendanceRepository;
     private final EmployeeRepository employeeRepository;
-    private final DataEncryptionService dataEncryptionService;
     private final AuditService auditService;
 
     /**
@@ -48,9 +47,8 @@ public class HRReportService {
         LocalDate endDate = period.atEndOfMonth();
 
         // Récupération des données de base
-        List<Employee> activeEmployees = employeeRepository.findByIsActiveTrue();
-        List<AttendanceRecord> attendanceRecords = attendanceRepository
-                .findByWorkDateBetween(startDate, endDate);
+        List<Employee> activeEmployees = employeeRepository.findActiveEmployeesPaginated(1000, 0);
+        List<AttendanceRecord> attendanceRecords = findAttendanceRecordsInPeriod(startDate, endDate);
 
         // Construction du rapport
         AttendanceReport report = AttendanceReport.builder()
@@ -87,7 +85,7 @@ public class HRReportService {
         Map<String, Object> exportData = new HashMap<>();
 
         // Données d'assiduité
-        List<AttendanceRecord> records = attendanceRepository.findByWorkDateBetween(startDate, endDate);
+        List<AttendanceRecord> records = findAttendanceRecordsInPeriod(startDate, endDate);
         if (anonymize) {
             exportData.put("attendance_data", anonymizeAttendanceData(records));
         } else {
@@ -96,7 +94,7 @@ public class HRReportService {
 
         // Statistiques agrégées
         exportData.put("statistics", calculateGlobalStatistics(
-                employeeRepository.findByIsActiveTrue(), records, period));
+                employeeRepository.findActiveEmployeesPaginated(1000, 0), records, period));
 
         // Métadonnées de l'export
         exportData.put("export_metadata", Map.of(
@@ -560,5 +558,24 @@ public class HRReportService {
                 "Rapport mensuel d'assiduité - 5 jours",
                 "Évaluation des performances - 15 jours",
                 "Révision des politiques RH - 30 jours");
+    }
+
+    /**
+     * Helper method to find all attendance records in a period
+     * Uses a combination of existing repository methods
+     */
+    private List<AttendanceRecord> findAttendanceRecordsInPeriod(LocalDate startDate, LocalDate endDate) {
+        // Since there's no direct findByWorkDateBetween method, we'll use a combination approach
+        // Get all employees and then get their attendance records for the period
+        List<Employee> allEmployees = employeeRepository.findActiveEmployeesPaginated(1000, 0);
+        
+        List<AttendanceRecord> allRecords = new ArrayList<>();
+        for (Employee employee : allEmployees) {
+            List<AttendanceRecord> employeeRecords = attendanceRepository
+                    .findByEmployeeIdAndWorkDateBetween(employee.getId(), startDate, endDate);
+            allRecords.addAll(employeeRecords);
+        }
+        
+        return allRecords;
     }
 }

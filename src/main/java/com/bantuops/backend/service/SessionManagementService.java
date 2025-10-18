@@ -39,26 +39,26 @@ public class SessionManagementService {
         try {
             // Add to global active sessions set
             redisTemplate.opsForSet().add(ACTIVE_SESSIONS_KEY, sessionId);
-            
+
             // Track user-specific sessions
             String userSessionsKey = USER_SESSIONS_PREFIX + userId;
             redisTemplate.opsForSet().add(userSessionsKey, sessionId);
-            
+
             // Set expiration for user sessions key (cleanup)
             redisTemplate.expire(userSessionsKey, Duration.ofHours(25));
-            
+
             // Register in distributed session registry
             String nodeId = getNodeId();
             distributedSessionService.registerDistributedSession(sessionId, userId, nodeId);
-            
+
             // Store session metadata if provided
             if (userAgent != null || ipAddress != null) {
                 storeSessionMetadata(sessionId, userId, userAgent, ipAddress);
             }
-            
+
             // Broadcast session creation event
             distributedSessionService.broadcastSessionEvent("SESSION_CREATED", sessionId, userId);
-            
+
             log.debug("Session tracked for user {}: {} on node {}", userId, sessionId, nodeId);
         } catch (Exception e) {
             log.error("Failed to track session for user {}", userId, e);
@@ -72,17 +72,17 @@ public class SessionManagementService {
         try {
             // Remove from global active sessions
             redisTemplate.opsForSet().remove(ACTIVE_SESSIONS_KEY, sessionId);
-            
+
             // Remove from user-specific sessions
             String userSessionsKey = USER_SESSIONS_PREFIX + userId;
             redisTemplate.opsForSet().remove(userSessionsKey, sessionId);
-            
+
             // Unregister from distributed session registry
             distributedSessionService.unregisterDistributedSession(sessionId, userId);
-            
+
             // Broadcast session destruction event
             distributedSessionService.broadcastSessionEvent("SESSION_DESTROYED", sessionId, userId);
-            
+
             log.debug("Session untracked for user {}: {}", userId, sessionId);
         } catch (Exception e) {
             log.error("Failed to untrack session for user {}", userId, e);
@@ -108,7 +108,7 @@ public class SessionManagementService {
     public void invalidateAllUserSessions(Long userId) {
         try {
             Set<String> userSessions = getUserActiveSessions(userId);
-            
+
             for (String sessionId : userSessions) {
                 try {
                     sessionRepository.deleteById(sessionId);
@@ -118,14 +118,14 @@ public class SessionManagementService {
                     log.warn("Failed to invalidate session: {}", sessionId, e);
                 }
             }
-            
+
             // Clear user sessions tracking
             String userSessionsKey = USER_SESSIONS_PREFIX + userId;
             redisTemplate.delete(userSessionsKey);
-            
+
             // Invalidate distributed sessions
             distributedSessionService.invalidateUserSessionsDistributed(userId);
-            
+
             log.info("Invalidated {} sessions for user {}", userSessions.size(), userId);
         } catch (Exception e) {
             log.error("Failed to invalidate sessions for user {}", userId, e);
@@ -163,7 +163,8 @@ public class SessionManagementService {
     public void cleanupExpiredSessions() {
         try {
             Set<String> activeSessions = redisTemplate.opsForSet().members(ACTIVE_SESSIONS_KEY);
-            if (activeSessions == null) return;
+            if (activeSessions == null)
+                return;
 
             int cleanedCount = 0;
             for (String sessionId : activeSessions) {
@@ -197,17 +198,16 @@ public class SessionManagementService {
     public void storeSessionMetadata(String sessionId, Long userId, String userAgent, String ipAddress) {
         try {
             String metadataKey = "bantuops:session_metadata:" + sessionId;
-            
+
             redisTemplate.opsForHash().putAll(metadataKey, Map.of(
-                "userId", userId.toString(),
-                "userAgent", userAgent != null ? userAgent : "unknown",
-                "ipAddress", ipAddress != null ? ipAddress : "unknown",
-                "createdAt", Instant.now().toString()
-            ));
-            
+                    "userId", userId.toString(),
+                    "userAgent", userAgent != null ? userAgent : "unknown",
+                    "ipAddress", ipAddress != null ? ipAddress : "unknown",
+                    "createdAt", Instant.now().toString()));
+
             // Set expiration for metadata (25 hours to outlive session)
             redisTemplate.expire(metadataKey, Duration.ofHours(25));
-            
+
             log.debug("Session metadata stored for session: {}", sessionId);
         } catch (Exception e) {
             log.error("Failed to store session metadata for session: {}", sessionId, e);
@@ -220,7 +220,13 @@ public class SessionManagementService {
     public Map<String, String> getSessionMetadata(String sessionId) {
         try {
             String metadataKey = "bantuops:session_metadata:" + sessionId;
-            return redisTemplate.opsForHash().entries(metadataKey);
+            Map<Object, Object> rawMap = redisTemplate.opsForHash().entries(metadataKey);
+
+            // Convert Map<Object, Object> to Map<String, String>
+            return rawMap.entrySet().stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                            entry -> entry.getKey().toString(),
+                            entry -> entry.getValue().toString()));
         } catch (Exception e) {
             log.error("Failed to get session metadata for session: {}", sessionId, e);
             return Map.of();
@@ -230,12 +236,13 @@ public class SessionManagementService {
     /**
      * Set session timeout for a specific session
      */
+    @SuppressWarnings("unchecked")
     public void setSessionTimeout(String sessionId, Duration timeout) {
         try {
             Session session = sessionRepository.findById(sessionId);
             if (session != null) {
                 session.setMaxInactiveInterval(timeout);
-                sessionRepository.save(session);
+                ((SessionRepository<Session>) sessionRepository).save(session);
                 log.debug("Session timeout set to {} for session: {}", timeout, sessionId);
             }
         } catch (Exception e) {
@@ -249,17 +256,15 @@ public class SessionManagementService {
     public Map<String, Object> getDistributedSessionStatistics() {
         try {
             Map<String, Object> localStats = Map.of(
-                "localActiveSessions", getActiveSessionCount(),
-                "nodeId", getNodeId()
-            );
-            
+                    "localActiveSessions", getActiveSessionCount(),
+                    "nodeId", getNodeId());
+
             Map<String, Object> distributedStats = distributedSessionService.getDistributedSessionStatistics();
-            
+
             return Map.of(
-                "local", localStats,
-                "distributed", distributedStats,
-                "timestamp", Instant.now().toString()
-            );
+                    "local", localStats,
+                    "distributed", distributedStats,
+                    "timestamp", Instant.now().toString());
         } catch (Exception e) {
             log.error("Failed to get distributed session statistics", e);
             return Map.of("error", "Failed to retrieve statistics");
@@ -320,10 +325,10 @@ public class SessionManagementService {
     public void applyRateLimit(String userId, String ipAddress, int maxRequests, int windowSeconds) {
         try {
             String rateLimitKey = "bantuops:rate_limit:" + userId + ":" + ipAddress;
-            redisTemplate.opsForValue().set(rateLimitKey, String.valueOf(maxRequests), 
-                Duration.ofSeconds(windowSeconds));
-            log.info("Limitation de débit appliquée: {} requêtes/{} secondes pour {}@{}", 
-                maxRequests, windowSeconds, userId, ipAddress);
+            redisTemplate.opsForValue().set(rateLimitKey, String.valueOf(maxRequests),
+                    Duration.ofSeconds(windowSeconds));
+            log.info("Limitation de débit appliquée: {} requêtes/{} secondes pour {}@{}",
+                    maxRequests, windowSeconds, userId, ipAddress);
         } catch (Exception e) {
             log.error("Erreur lors de l'application de la limitation de débit", e);
         }
@@ -348,7 +353,8 @@ public class SessionManagementService {
     public void invalidateSessionsByIp(String ipAddress) {
         try {
             Set<String> activeSessions = redisTemplate.opsForSet().members(ACTIVE_SESSIONS_KEY);
-            if (activeSessions == null) return;
+            if (activeSessions == null)
+                return;
 
             int invalidatedCount = 0;
             for (String sessionId : activeSessions) {
@@ -383,13 +389,14 @@ public class SessionManagementService {
     public void invalidateAllNonAdminSessions() {
         try {
             Set<String> activeSessions = redisTemplate.opsForSet().members(ACTIVE_SESSIONS_KEY);
-            if (activeSessions == null) return;
+            if (activeSessions == null)
+                return;
 
             int invalidatedCount = 0;
             for (String sessionId : activeSessions) {
                 Map<String, String> metadata = getSessionMetadata(sessionId);
                 String userId = metadata.get("userId");
-                
+
                 // Vérifier si l'utilisateur n'est pas admin (logique simplifiée)
                 if (userId != null && !isAdminUser(userId)) {
                     sessionRepository.deleteById(sessionId);

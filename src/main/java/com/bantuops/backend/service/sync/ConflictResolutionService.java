@@ -32,22 +32,22 @@ public class ConflictResolutionService {
     private final InvoiceRepository invoiceRepository;
     private final PayrollRecordRepository payrollRecordRepository;
     private final AuditService auditService;
-    
+
     /**
      * Résout les conflits pour une liste d'entités
      */
     @Transactional
     public List<ConflictResolution> resolveConflicts(String entityType, List<Long> entityIds) {
-        log.info("Résolution des conflits pour l'entité {} avec {} IDs", entityType, 
+        log.info("Résolution des conflits pour l'entité {} avec {} IDs", entityType,
                 entityIds != null ? entityIds.size() : 0);
-        
+
         List<ConflictResolution> resolutions = new ArrayList<>();
-        
+
         if (entityIds == null || entityIds.isEmpty()) {
             log.warn("Aucun ID d'entité fourni pour la résolution des conflits");
             return resolutions;
         }
-        
+
         switch (entityType.toLowerCase()) {
             case "employee":
                 resolutions.addAll(resolveEmployeeConflicts(entityIds));
@@ -61,69 +61,86 @@ public class ConflictResolutionService {
             default:
                 log.warn("Type d'entité non supporté pour la résolution de conflits: {}", entityType);
         }
-        
+
         // Audit des résolutions
         for (ConflictResolution resolution : resolutions) {
-            auditService.logConflictResolution(resolution.getConflictId(), resolution.getEntityType(),
-                resolution.getEntityId(), resolution.getStrategy(), resolution.getResolvedBy());
+            auditService.logDataAccess(
+                    "CONFLICT_RESOLUTION",
+                    "Résolution de conflit de synchronisation",
+                    Map.of(
+                            "conflictId", resolution.getConflictId(),
+                            "entityType", resolution.getEntityType(),
+                            "entityId", String.valueOf(resolution.getEntityId()),
+                            "strategy", resolution.getStrategy().toString(),
+                            "resolvedBy", resolution.getResolvedBy()));
         }
-        
+
         log.info("Résolution terminée. {} conflits résolus", resolutions.size());
         return resolutions;
     }
-    
+
     /**
      * Résout un conflit spécifique avec une stratégie donnée
      */
     @Transactional
-    public ConflictResolution resolveConflict(String entityType, Long entityId, 
-                                            ConflictResolution.ResolutionStrategy strategy,
-                                            Map<String, Object> frontendData,
-                                            Map<String, Object> backendData) {
+    public ConflictResolution resolveConflict(String entityType, Long entityId,
+            ConflictResolution.ResolutionStrategy strategy,
+            Map<String, Object> frontendData,
+            Map<String, Object> backendData) {
         log.info("Résolution du conflit pour {} ID {} avec stratégie {}", entityType, entityId, strategy);
-        
+
         String conflictId = UUID.randomUUID().toString();
         String resolvedBy = getCurrentUserId();
-        
+
         Map<String, Object> resolvedData = applyResolutionStrategy(strategy, frontendData, backendData);
-        
+
         // Appliquer la résolution à l'entité
         boolean applied = applyResolutionToEntity(entityType, entityId, resolvedData);
-        
+
         ConflictResolution resolution = ConflictResolution.builder()
-            .conflictId(conflictId)
-            .entityType(entityType)
-            .entityId(entityId)
-            .strategy(strategy)
-            .resolvedData(resolvedData)
-            .resolvedBy(resolvedBy)
-            .resolvedAt(LocalDateTime.now())
-            .reason("Résolution automatique de conflit")
-            .originalFrontendData(frontendData)
-            .originalBackendData(backendData)
-            .build();
-        
+                .conflictId(conflictId)
+                .entityType(entityType)
+                .entityId(entityId)
+                .strategy(strategy)
+                .resolvedData(resolvedData)
+                .resolvedBy(resolvedBy)
+                .resolvedAt(LocalDateTime.now())
+                .reason("Résolution automatique de conflit")
+                .originalFrontendData(frontendData)
+                .originalBackendData(backendData)
+                .build();
+
         if (applied) {
-            auditService.logConflictResolution(conflictId, entityType, entityId, strategy, resolvedBy);
+            auditService.logDataAccess(
+                "CONFLICT_RESOLUTION",
+                "Résolution individuelle de conflit",
+                Map.of(
+                    "conflictId", conflictId,
+                    "entityType", entityType,
+                    "entityId", String.valueOf(entityId),
+                    "strategy", strategy.toString(),
+                    "resolvedBy", resolvedBy
+                )
+            );
             log.info("Conflit {} résolu avec succès", conflictId);
         } else {
             log.error("Échec de l'application de la résolution pour le conflit {}", conflictId);
         }
-        
+
         return resolution;
     }
-    
+
     /**
      * Résout les conflits d'employés
      */
     private List<ConflictResolution> resolveEmployeeConflicts(List<Long> employeeIds) {
         List<ConflictResolution> resolutions = new ArrayList<>();
-        
+
         for (Long employeeId : employeeIds) {
             Optional<Employee> employeeOpt = employeeRepository.findById(employeeId);
             if (employeeOpt.isPresent()) {
                 Employee employee = employeeOpt.get();
-                
+
                 // Détecter les conflits potentiels et les résoudre
                 ConflictResolution resolution = resolveEmployeeConflict(employee);
                 if (resolution != null) {
@@ -131,52 +148,52 @@ public class ConflictResolutionService {
                 }
             }
         }
-        
+
         return resolutions;
     }
-    
+
     /**
      * Résout les conflits de factures
      */
     private List<ConflictResolution> resolveInvoiceConflicts(List<Long> invoiceIds) {
         List<ConflictResolution> resolutions = new ArrayList<>();
-        
+
         for (Long invoiceId : invoiceIds) {
             Optional<Invoice> invoiceOpt = invoiceRepository.findById(invoiceId);
             if (invoiceOpt.isPresent()) {
                 Invoice invoice = invoiceOpt.get();
-                
+
                 ConflictResolution resolution = resolveInvoiceConflict(invoice);
                 if (resolution != null) {
                     resolutions.add(resolution);
                 }
             }
         }
-        
+
         return resolutions;
     }
-    
+
     /**
      * Résout les conflits de paie
      */
     private List<ConflictResolution> resolvePayrollConflicts(List<Long> payrollIds) {
         List<ConflictResolution> resolutions = new ArrayList<>();
-        
+
         for (Long payrollId : payrollIds) {
             Optional<PayrollRecord> recordOpt = payrollRecordRepository.findById(payrollId);
             if (recordOpt.isPresent()) {
                 PayrollRecord record = recordOpt.get();
-                
+
                 ConflictResolution resolution = resolvePayrollConflict(record);
                 if (resolution != null) {
                     resolutions.add(resolution);
                 }
             }
         }
-        
+
         return resolutions;
     }
-    
+
     /**
      * Résout un conflit d'employé spécifique
      */
@@ -184,135 +201,135 @@ public class ConflictResolutionService {
         // Exemple de résolution : vérifier les données incohérentes
         Map<String, Object> backendData = convertEmployeeToMap(employee);
         Map<String, Object> frontendData = new HashMap<>(); // Simulated frontend data
-        
+
         // Détecter les conflits (exemple simplifié)
         boolean hasConflict = detectEmployeeConflict(employee);
-        
+
         if (hasConflict) {
-            return resolveConflict("employee", employee.getId(), 
-                ConflictResolution.ResolutionStrategy.BACKEND_WINS,
-                frontendData, backendData);
+            return resolveConflict("employee", employee.getId(),
+                    ConflictResolution.ResolutionStrategy.BACKEND_WINS,
+                    frontendData, backendData);
         }
-        
+
         return null;
     }
-    
+
     /**
      * Résout un conflit de facture spécifique
      */
     private ConflictResolution resolveInvoiceConflict(Invoice invoice) {
         Map<String, Object> backendData = convertInvoiceToMap(invoice);
         Map<String, Object> frontendData = new HashMap<>();
-        
+
         boolean hasConflict = detectInvoiceConflict(invoice);
-        
+
         if (hasConflict) {
             return resolveConflict("invoice", invoice.getId(),
-                ConflictResolution.ResolutionStrategy.LATEST_TIMESTAMP_WINS,
-                frontendData, backendData);
+                    ConflictResolution.ResolutionStrategy.LATEST_TIMESTAMP_WINS,
+                    frontendData, backendData);
         }
-        
+
         return null;
     }
-    
+
     /**
      * Résout un conflit de paie spécifique
      */
     private ConflictResolution resolvePayrollConflict(PayrollRecord record) {
         Map<String, Object> backendData = convertPayrollToMap(record);
         Map<String, Object> frontendData = new HashMap<>();
-        
+
         boolean hasConflict = detectPayrollConflict(record);
-        
+
         if (hasConflict) {
             return resolveConflict("payroll", record.getId(),
-                ConflictResolution.ResolutionStrategy.BACKEND_WINS,
-                frontendData, backendData);
+                    ConflictResolution.ResolutionStrategy.BACKEND_WINS,
+                    frontendData, backendData);
         }
-        
+
         return null;
     }
-    
+
     /**
      * Applique une stratégie de résolution
      */
     private Map<String, Object> applyResolutionStrategy(ConflictResolution.ResolutionStrategy strategy,
-                                                       Map<String, Object> frontendData,
-                                                       Map<String, Object> backendData) {
+            Map<String, Object> frontendData,
+            Map<String, Object> backendData) {
         switch (strategy) {
             case FRONTEND_WINS:
                 return new HashMap<>(frontendData);
-            
+
             case BACKEND_WINS:
                 return new HashMap<>(backendData);
-            
+
             case MERGE_DATA:
                 return mergeData(frontendData, backendData);
-            
+
             case LATEST_TIMESTAMP_WINS:
                 return resolveByTimestamp(frontendData, backendData);
-            
+
             case CUSTOM_RULE:
                 return applyCustomRules(frontendData, backendData);
-            
+
             case MANUAL_RESOLUTION:
             default:
                 // Pour la résolution manuelle, on privilégie le backend par défaut
                 return new HashMap<>(backendData);
         }
     }
-    
+
     /**
      * Fusionne les données frontend et backend
      */
     private Map<String, Object> mergeData(Map<String, Object> frontendData, Map<String, Object> backendData) {
         Map<String, Object> merged = new HashMap<>(backendData);
-        
+
         // Fusionner en privilégiant les données non nulles du frontend
         for (Map.Entry<String, Object> entry : frontendData.entrySet()) {
             if (entry.getValue() != null) {
                 merged.put(entry.getKey(), entry.getValue());
             }
         }
-        
+
         return merged;
     }
-    
+
     /**
      * Résout par timestamp (le plus récent gagne)
      */
     private Map<String, Object> resolveByTimestamp(Map<String, Object> frontendData, Map<String, Object> backendData) {
         LocalDateTime frontendTimestamp = extractTimestamp(frontendData);
         LocalDateTime backendTimestamp = extractTimestamp(backendData);
-        
+
         if (frontendTimestamp != null && backendTimestamp != null) {
             return frontendTimestamp.isAfter(backendTimestamp) ? frontendData : backendData;
         }
-        
+
         // Par défaut, privilégier le backend
         return backendData;
     }
-    
+
     /**
      * Applique des règles personnalisées
      */
     private Map<String, Object> applyCustomRules(Map<String, Object> frontendData, Map<String, Object> backendData) {
         Map<String, Object> resolved = new HashMap<>(backendData);
-        
+
         // Règles personnalisées pour différents champs
         // Exemple : pour les montants, privilégier le backend (plus sécurisé)
         if (frontendData.containsKey("totalAmount") && backendData.containsKey("totalAmount")) {
             resolved.put("totalAmount", backendData.get("totalAmount"));
         }
-        
+
         // Pour les informations non critiques, privilégier le frontend (plus récent)
         if (frontendData.containsKey("description") && frontendData.get("description") != null) {
             resolved.put("description", frontendData.get("description"));
         }
-        
+
         return resolved;
     }
-    
+
     /**
      * Applique la résolution à l'entité
      */
@@ -330,12 +347,12 @@ public class ConflictResolutionService {
                     return false;
             }
         } catch (Exception e) {
-            log.error("Erreur lors de l'application de la résolution pour {} ID {}: {}", 
+            log.error("Erreur lors de l'application de la résolution pour {} ID {}: {}",
                     entityType, entityId, e.getMessage(), e);
             return false;
         }
     }
-    
+
     /**
      * Applique la résolution à un employé
      */
@@ -349,7 +366,7 @@ public class ConflictResolutionService {
         }
         return false;
     }
-    
+
     /**
      * Applique la résolution à une facture
      */
@@ -363,7 +380,7 @@ public class ConflictResolutionService {
         }
         return false;
     }
-    
+
     /**
      * Applique la résolution à un enregistrement de paie
      */
@@ -377,34 +394,32 @@ public class ConflictResolutionService {
         }
         return false;
     }
-    
+
     /**
      * Détecte les conflits d'employé
      */
     private boolean detectEmployeeConflict(Employee employee) {
         // Logique de détection de conflit simplifiée
-        return employee.getPersonalInfo() != null && 
-               (employee.getPersonalInfo().getEmail() == null || 
-                employee.getPersonalInfo().getEmail().isEmpty());
+        return employee.getEmail() == null || employee.getEmail().isEmpty();
     }
-    
+
     /**
      * Détecte les conflits de facture
      */
     private boolean detectInvoiceConflict(Invoice invoice) {
-        return invoice.getTotalAmount() == null || 
-               invoice.getTotalAmount().compareTo(java.math.BigDecimal.ZERO) <= 0;
+        return invoice.getTotalAmount() == null ||
+                invoice.getTotalAmount().compareTo(java.math.BigDecimal.ZERO) <= 0;
     }
-    
+
     /**
      * Détecte les conflits de paie
      */
     private boolean detectPayrollConflict(PayrollRecord record) {
-        return record.getGrossSalary() == null || 
-               record.getNetSalary() == null ||
-               record.getNetSalary().compareTo(record.getGrossSalary()) > 0;
+        return record.getGrossSalary() == null ||
+                record.getNetSalary() == null ||
+                record.getNetSalary().compareTo(record.getGrossSalary()) > 0;
     }
-    
+
     /**
      * Convertit un employé en Map
      */
@@ -412,12 +427,15 @@ public class ConflictResolutionService {
         Map<String, Object> data = new HashMap<>();
         data.put("id", employee.getId());
         data.put("employeeNumber", employee.getEmployeeNumber());
-        data.put("personalInfo", employee.getPersonalInfo());
-        data.put("employmentInfo", employee.getEmploymentInfo());
+        data.put("email", employee.getEmail());
+        data.put("phoneNumber", employee.getPhoneNumber());
+        data.put("baseSalary", employee.getBaseSalary());
+        data.put("position", employee.getPosition());
+        data.put("department", employee.getDepartment());
         data.put("updatedAt", employee.getUpdatedAt());
         return data;
     }
-    
+
     /**
      * Convertit une facture en Map
      */
@@ -430,7 +448,7 @@ public class ConflictResolutionService {
         data.put("updatedAt", invoice.getUpdatedAt());
         return data;
     }
-    
+
     /**
      * Convertit un enregistrement de paie en Map
      */
@@ -438,13 +456,13 @@ public class ConflictResolutionService {
         Map<String, Object> data = new HashMap<>();
         data.put("id", record.getId());
         data.put("employeeId", record.getEmployee().getId());
-        data.put("period", record.getPeriod());
+        data.put("payrollPeriod", record.getPayrollPeriod());
         data.put("grossSalary", record.getGrossSalary());
         data.put("netSalary", record.getNetSalary());
         data.put("updatedAt", record.getUpdatedAt());
         return data;
     }
-    
+
     /**
      * Met à jour un employé à partir d'une Map
      */
@@ -455,7 +473,7 @@ public class ConflictResolutionService {
         }
         // Ajouter d'autres champs selon les besoins
     }
-    
+
     /**
      * Met à jour une facture à partir d'une Map
      */
@@ -467,7 +485,7 @@ public class ConflictResolutionService {
             invoice.setVatAmount((java.math.BigDecimal) data.get("vatAmount"));
         }
     }
-    
+
     /**
      * Met à jour un enregistrement de paie à partir d'une Map
      */
@@ -479,7 +497,7 @@ public class ConflictResolutionService {
             record.setNetSalary((java.math.BigDecimal) data.get("netSalary"));
         }
     }
-    
+
     /**
      * Extrait le timestamp d'une Map de données
      */
@@ -490,7 +508,7 @@ public class ConflictResolutionService {
         }
         return null;
     }
-    
+
     /**
      * Obtient l'ID de l'utilisateur actuel
      */

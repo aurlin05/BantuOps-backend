@@ -121,8 +121,8 @@ public class KeyManagementUtil {
             byte[] keyBytes = Base64.getDecoder().decode(keyBase64);
             
             // Analyse de l'entropie
-            int uniqueBytes = (int) java.util.Arrays.stream(keyBytes)
-                .boxed()
+            int uniqueBytes = (int) java.util.stream.IntStream.range(0, keyBytes.length)
+                .map(i -> keyBytes[i] & 0xFF)
                 .distinct()
                 .count();
             
@@ -131,7 +131,8 @@ public class KeyManagementUtil {
             
             // Vérification qu'il ne s'agit pas d'une clé faible (tous zéros, pattern répétitif, etc.)
             boolean hasPattern = hasRepeatingPattern(keyBytes);
-            boolean isAllZeros = java.util.Arrays.stream(keyBytes).allMatch(b -> b == 0);
+            boolean isAllZeros = java.util.stream.IntStream.range(0, keyBytes.length)
+                .allMatch(i -> keyBytes[i] == 0);
             
             if (isAllZeros || hasPattern) {
                 return Math.min(entropyScore, 30); // Clé faible

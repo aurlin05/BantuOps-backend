@@ -94,9 +94,9 @@ public class ReportGenerationService {
         auditService.logFinancialOperation(
             "GENERATE_FINANCIAL_REPORT",
             null,
-            "Génération du rapport financier " + request.getReportType(),
             Map.of(
                 "reportId", reportId,
+                "description", "Génération du rapport financier " + request.getReportType(),
                 "startDate", request.getStartDate().toString(),
                 "endDate", request.getEndDate().toString(),
                 "reportType", request.getReportType().toString(),
@@ -157,8 +157,8 @@ public class ReportGenerationService {
         auditService.logFinancialOperation(
             "EXPORT_FINANCIAL_DATA",
             null,
-            "Export des données financières",
             Map.of(
+                "description", "Export des données financières",
                 "startDate", request.getStartDate().toString(),
                 "endDate", request.getEndDate().toString(),
                 "invoiceCount", String.valueOf(invoices.size()),
@@ -425,8 +425,8 @@ public class ReportGenerationService {
     private PerformanceMetrics generatePerformanceMetrics(FinancialReportRequest request) {
         // Cette méthode sera implémentée selon les besoins spécifiques
         return PerformanceMetrics.builder()
-            .reportPeriod(request.getStartDate() + " - " + request.getEndDate())
-            .generatedAt(LocalDateTime.now())
+            .evaluationPeriod(request.getStartDate() + " - " + request.getEndDate())
+            .comments("Métriques générées automatiquement pour le rapport financier")
             .build();
     }
 

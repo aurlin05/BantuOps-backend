@@ -5,6 +5,7 @@ import com.bantuops.backend.dto.EmployeeRequest;
 import com.bantuops.backend.dto.InvoiceRequest;
 import com.bantuops.backend.dto.PayrollRequest;
 import com.bantuops.backend.dto.TransactionRequest;
+import com.bantuops.backend.dto.ValidationResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -58,7 +59,8 @@ public class BusinessRuleValidator {
         if (request.getOvertimeHours() != null && request.getRegularHours() != null) {
             BigDecimal totalHours = request.getRegularHours().add(request.getOvertimeHours());
             if (totalHours.compareTo(new BigDecimal("12")) > 0) {
-                errors.add("La durée totale de travail ne peut pas dépasser 12 heures par jour selon le Code du Travail sénégalais");
+                errors.add(
+                        "La durée totale de travail ne peut pas dépasser 12 heures par jour selon le Code du Travail sénégalais");
             }
         }
 
@@ -68,8 +70,8 @@ public class BusinessRuleValidator {
         // Validation des déductions
         validatePayrollDeductions(request, errors, warnings);
 
-        log.debug("Validation des données de paie terminée: {} erreurs, {} avertissements", 
-                 errors.size(), warnings.size());
+        log.debug("Validation des données de paie terminée: {} erreurs, {} avertissements",
+                errors.size(), warnings.size());
 
         return new ValidationResult(errors.isEmpty(), errors, warnings);
     }
@@ -92,7 +94,8 @@ public class BusinessRuleValidator {
         }
 
         // Validation du numéro fiscal pour les gros montants
-        if (request.getSubtotalAmount() != null && request.getSubtotalAmount().compareTo(new BigDecimal("1000000")) > 0) {
+        if (request.getSubtotalAmount() != null
+                && request.getSubtotalAmount().compareTo(new BigDecimal("1000000")) > 0) {
             if (request.getClientTaxNumber() == null || request.getClientTaxNumber().trim().isEmpty()) {
                 errors.add("Le numéro fiscal du client est obligatoire pour les factures supérieures à 1 000 000 XOF");
             }
@@ -113,12 +116,13 @@ public class BusinessRuleValidator {
         }
 
         // Validation de la devise
-        if (!"XOF".equals(request.getCurrency()) && !"EUR".equals(request.getCurrency()) && !"USD".equals(request.getCurrency())) {
+        if (!"XOF".equals(request.getCurrency()) && !"EUR".equals(request.getCurrency())
+                && !"USD".equals(request.getCurrency())) {
             errors.add("La devise doit être XOF (Franc CFA), EUR ou USD");
         }
 
-        log.debug("Validation des données de facture terminée: {} erreurs, {} avertissements", 
-                 errors.size(), warnings.size());
+        log.debug("Validation des données de facture terminée: {} erreurs, {} avertissements",
+                errors.size(), warnings.size());
 
         return new ValidationResult(errors.isEmpty(), errors, warnings);
     }
@@ -164,8 +168,8 @@ public class BusinessRuleValidator {
         // Validation des heures de travail
         validateWorkHours(request, errors, warnings);
 
-        log.debug("Validation des données d'employé terminée: {} erreurs, {} avertissements", 
-                 errors.size(), warnings.size());
+        log.debug("Validation des données d'employé terminée: {} erreurs, {} avertissements",
+                errors.size(), warnings.size());
 
         return new ValidationResult(errors.isEmpty(), errors, warnings);
     }
@@ -192,7 +196,7 @@ public class BusinessRuleValidator {
             BigDecimal declarationThreshold = new BigDecimal("10000000"); // 10M XOF
             if (request.getAmount().compareTo(declarationThreshold) > 0) {
                 warnings.add("Les transactions supérieures à 10M XOF nécessitent une déclaration spéciale");
-                
+
                 // IBAN obligatoire pour les gros montants
                 if (request.getIban() == null || request.getIban().trim().isEmpty()) {
                     errors.add("L'IBAN est obligatoire pour les transactions supérieures à 10M XOF");
@@ -206,8 +210,8 @@ public class BusinessRuleValidator {
         }
 
         // Validation des virements internationaux
-        if (request.getTransactionType() != null && 
-            request.getTransactionType().toString().contains("WIRE_TRANSFER")) {
+        if (request.getTransactionType() != null &&
+                request.getTransactionType().toString().contains("WIRE_TRANSFER")) {
             if (request.getBicSwift() == null || request.getBicSwift().trim().isEmpty()) {
                 errors.add("Le code BIC/SWIFT est obligatoire pour les virements internationaux");
             }
@@ -222,8 +226,8 @@ public class BusinessRuleValidator {
             }
         }
 
-        log.debug("Validation des données de transaction terminée: {} erreurs, {} avertissements", 
-                 errors.size(), warnings.size());
+        log.debug("Validation des données de transaction terminée: {} erreurs, {} avertissements",
+                errors.size(), warnings.size());
 
         return new ValidationResult(errors.isEmpty(), errors, warnings);
     }
@@ -250,17 +254,19 @@ public class BusinessRuleValidator {
             if (request.getTotalHoursWorked() > 12) {
                 errors.add("La durée de travail ne peut pas dépasser 12 heures par jour");
             } else {
-                warnings.add("Les heures supplémentaires au-delà de 8h/jour nécessitent une majoration selon le Code du Travail");
+                warnings.add(
+                        "Les heures supplémentaires au-delà de 8h/jour nécessitent une majoration selon le Code du Travail");
             }
         }
 
         // Validation des heures supplémentaires
         if (request.getOvertimeHours() != null && request.getOvertimeHours() > 4) {
-            errors.add("Les heures supplémentaires ne peuvent pas dépasser 4 heures par jour selon la législation sénégalaise");
+            errors.add(
+                    "Les heures supplémentaires ne peuvent pas dépasser 4 heures par jour selon la législation sénégalaise");
         }
 
-        log.debug("Validation des données d'assiduité terminée: {} erreurs, {} avertissements", 
-                 errors.size(), warnings.size());
+        log.debug("Validation des données d'assiduité terminée: {} erreurs, {} avertissements",
+                errors.size(), warnings.size());
 
         return new ValidationResult(errors.isEmpty(), errors, warnings);
     }
@@ -274,7 +280,7 @@ public class BusinessRuleValidator {
         }
 
         String cleanTaxNumber = taxNumber.trim();
-        
+
         // Vérification du format (13 chiffres)
         if (!SENEGAL_TAX_NUMBER_PATTERN.matcher(cleanTaxNumber).matches()) {
             return false;
@@ -285,7 +291,7 @@ public class BusinessRuleValidator {
             // Les 12 premiers chiffres + 1 chiffre de contrôle
             String baseNumber = cleanTaxNumber.substring(0, 12);
             int checkDigit = Integer.parseInt(cleanTaxNumber.substring(12));
-            
+
             // Calcul de la clé de contrôle (algorithme Luhn modifié)
             int sum = 0;
             for (int i = 0; i < baseNumber.length(); i++) {
@@ -298,10 +304,10 @@ public class BusinessRuleValidator {
                 }
                 sum += digit;
             }
-            
+
             int calculatedCheckDigit = (10 - (sum % 10)) % 10;
             return calculatedCheckDigit == checkDigit;
-            
+
         } catch (NumberFormatException e) {
             log.warn("Erreur lors de la validation du numéro fiscal: {}", taxNumber, e);
             return false;
@@ -317,7 +323,7 @@ public class BusinessRuleValidator {
         }
 
         String cleanPhone = phoneNumber.trim().replaceAll("\\s+", "");
-        
+
         // Vérification du format
         if (!SENEGAL_PHONE_PATTERN.matcher(cleanPhone).matches()) {
             return false;
@@ -337,13 +343,13 @@ public class BusinessRuleValidator {
         if (localNumber.length() == 9) {
             // Numéros mobiles: 70, 75, 76, 77, 78
             String prefix = localNumber.substring(0, 2);
-            return prefix.equals("70") || prefix.equals("75") || prefix.equals("76") || 
-                   prefix.equals("77") || prefix.equals("78");
+            return prefix.equals("70") || prefix.equals("75") || prefix.equals("76") ||
+                    prefix.equals("77") || prefix.equals("78");
         } else if (localNumber.length() == 8) {
             // Numéros fixes: 33 (Dakar), 34 (Thiès), 35 (Kaolack), etc.
             String prefix = localNumber.substring(0, 2);
-            return prefix.equals("33") || prefix.equals("34") || prefix.equals("35") || 
-                   prefix.equals("36") || prefix.equals("37") || prefix.equals("38") || prefix.equals("39");
+            return prefix.equals("33") || prefix.equals("34") || prefix.equals("35") ||
+                    prefix.equals("36") || prefix.equals("37") || prefix.equals("38") || prefix.equals("39");
         }
 
         return false;
@@ -358,7 +364,7 @@ public class BusinessRuleValidator {
         }
 
         String cleanAccount = accountNumber.trim().replaceAll("\\s+", "");
-        
+
         // Format général: 10 à 16 chiffres
         if (!BANK_ACCOUNT_PATTERN.matcher(cleanAccount).matches()) {
             return false;
@@ -370,10 +376,11 @@ public class BusinessRuleValidator {
                 // Format: BBBBBCCCCCCCCCCC où B=banque, C=compte
                 String bankCode = cleanAccount.substring(0, 5);
                 String accountCode = cleanAccount.substring(5);
-                
-                // Vérification que le code banque est valide (commence par 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+                // Vérification que le code banque est valide (commence par 1, 2, 3, 4, 5, 6, 7,
+                // 8, 9)
                 return bankCode.charAt(0) >= '1' && bankCode.charAt(0) <= '9';
-                
+
             } catch (Exception e) {
                 log.warn("Erreur lors de la validation du compte bancaire: {}", accountNumber, e);
                 return false;
@@ -392,7 +399,7 @@ public class BusinessRuleValidator {
         }
 
         String cleanId = nationalId.trim();
-        
+
         // Vérification du format (13 chiffres)
         if (!SENEGAL_NATIONAL_ID_PATTERN.matcher(cleanId).matches()) {
             return false;
@@ -403,19 +410,19 @@ public class BusinessRuleValidator {
             String yearStr = cleanId.substring(0, 2);
             String monthStr = cleanId.substring(2, 4);
             String dayStr = cleanId.substring(4, 6);
-            
+
             int year = Integer.parseInt(yearStr);
             int month = Integer.parseInt(monthStr);
             int day = Integer.parseInt(dayStr);
-            
+
             // Ajustement de l'année (pivot à 50)
             year = year > 50 ? 1900 + year : 2000 + year;
-            
+
             // Validation de la date
             if (month < 1 || month > 12 || day < 1 || day > 31) {
                 return false;
             }
-            
+
             // Vérification que la date est cohérente
             try {
                 LocalDate birthDate = LocalDate.of(year, month, day);
@@ -424,31 +431,30 @@ public class BusinessRuleValidator {
             } catch (Exception e) {
                 return false;
             }
-            
+
         } catch (NumberFormatException e) {
             log.warn("Erreur lors de la validation du numéro d'identité: {}", nationalId, e);
             return false;
         }
-
-        return true;
     }
 
     /**
      * Valide les cotisations sociales selon les taux sénégalais
      */
     private void validateSocialContributions(PayrollRequest request, List<String> errors, List<String> warnings) {
-        if (request.getBaseSalary() == null) return;
+        if (request.getBaseSalary() == null)
+            return;
 
         BigDecimal baseSalary = request.getBaseSalary();
-        
+
         // Taux de cotisations sénégalais (approximatifs)
         BigDecimal ipresRate = new BigDecimal("0.06"); // 6% IPRES
         BigDecimal cssRate = new BigDecimal("0.07"); // 7% CSS
-        
+
         // Calcul des cotisations attendues
         BigDecimal expectedIpres = baseSalary.multiply(ipresRate);
         BigDecimal expectedCss = baseSalary.multiply(cssRate);
-        
+
         // Avertissements si les cotisations semblent incorrectes
         if (request.getBaseSalary().compareTo(new BigDecimal("100000")) > 0) {
             warnings.add("Vérifiez les cotisations sociales pour les salaires élevés (plafonds IPRES/CSS)");
@@ -460,16 +466,23 @@ public class BusinessRuleValidator {
      */
     private void validatePayrollDeductions(PayrollRequest request, List<String> errors, List<String> warnings) {
         BigDecimal totalDeductions = BigDecimal.ZERO;
-        
-        if (request.getAdvanceDeduction() != null) totalDeductions = totalDeductions.add(request.getAdvanceDeduction());
-        if (request.getLoanDeduction() != null) totalDeductions = totalDeductions.add(request.getLoanDeduction());
-        if (request.getAbsenceDeduction() != null) totalDeductions = totalDeductions.add(request.getAbsenceDeduction());
-        if (request.getDelayPenalty() != null) totalDeductions = totalDeductions.add(request.getDelayPenalty());
-        if (request.getOtherDeductions() != null) totalDeductions = totalDeductions.add(request.getOtherDeductions());
-        
-        // Les déductions ne peuvent pas dépasser 1/3 du salaire selon la loi sénégalaise
+
+        if (request.getAdvanceDeduction() != null)
+            totalDeductions = totalDeductions.add(request.getAdvanceDeduction());
+        if (request.getLoanDeduction() != null)
+            totalDeductions = totalDeductions.add(request.getLoanDeduction());
+        if (request.getAbsenceDeduction() != null)
+            totalDeductions = totalDeductions.add(request.getAbsenceDeduction());
+        if (request.getDelayPenalty() != null)
+            totalDeductions = totalDeductions.add(request.getDelayPenalty());
+        if (request.getOtherDeductions() != null)
+            totalDeductions = totalDeductions.add(request.getOtherDeductions());
+
+        // Les déductions ne peuvent pas dépasser 1/3 du salaire selon la loi
+        // sénégalaise
         if (request.getBaseSalary() != null) {
-            BigDecimal maxDeductions = request.getBaseSalary().divide(new BigDecimal("3"), 2, java.math.RoundingMode.HALF_UP);
+            BigDecimal maxDeductions = request.getBaseSalary().divide(new BigDecimal("3"), 2,
+                    java.math.RoundingMode.HALF_UP);
             if (totalDeductions.compareTo(maxDeductions) > 0) {
                 errors.add("Les déductions ne peuvent pas dépasser 1/3 du salaire selon la législation sénégalaise");
             }
@@ -484,40 +497,22 @@ public class BusinessRuleValidator {
             try {
                 java.time.LocalTime startTime = java.time.LocalTime.parse(request.getWorkStartTime());
                 java.time.LocalTime endTime = java.time.LocalTime.parse(request.getWorkEndTime());
-                
+
                 long hours = java.time.Duration.between(startTime, endTime).toHours();
-                
+
                 if (hours > MAX_DAILY_WORK_HOURS) {
                     warnings.add("La durée de travail quotidienne dépasse 8 heures (durée légale au Sénégal)");
                 }
-                
+
                 if (hours < 4) {
                     warnings.add("La durée de travail quotidienne semble très courte");
                 }
-                
+
             } catch (Exception e) {
                 errors.add("Format d'heure invalide");
             }
         }
     }
 
-    /**
-     * Classe pour le résultat de validation
-     */
-    public static class ValidationResult {
-        private final boolean valid;
-        private final List<String> errors;
-        private final List<String> warnings;
 
-        public ValidationResult(boolean valid, List<String> errors, List<String> warnings) {
-            this.valid = valid;
-            this.errors = errors != null ? errors : new ArrayList<>();
-            this.warnings = warnings != null ? warnings : new ArrayList<>();
-        }
-
-        public boolean isValid() { return valid; }
-        public List<String> getErrors() { return errors; }
-        public List<String> getWarnings() { return warnings; }
-        public boolean hasWarnings() { return !warnings.isEmpty(); }
-    }
 }

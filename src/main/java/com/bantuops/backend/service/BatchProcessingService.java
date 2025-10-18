@@ -6,18 +6,22 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.batch.core.*;
-import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
-import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.repository.JobExecutionAlreadyRunningException;
 import org.springframework.batch.core.repository.JobInstanceAlreadyCompleteException;
 import org.springframework.batch.core.repository.JobRestartException;
+import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JdbcPagingItemReader;
-import org.springframework.batch.item.database.JpaItemWriter;
+
 import org.springframework.batch.item.database.PagingQueryProvider;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.batch.item.file.FlatFileItemWriter;
@@ -26,7 +30,6 @@ import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
 
-import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -43,15 +46,16 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class BatchProcessingService {
 
-
     private final JobLauncher jobLauncher;
+    private final JobRepository jobRepository;
+    private final PlatformTransactionManager transactionManager;
     private final DataSource dataSource;
     private final PayrollCalculationService payrollCalculationService;
     private final PerformanceMonitoringService performanceMonitoringService;
-    
+
     // Suivi des jobs en cours
     private final Map<String, JobExecution> activeJobs = new ConcurrentHashMap<>();
-    
+
     // Configuration des chunks
     private static final int DEFAULT_CHUNK_SIZE = 100;
     private static final int LARGE_CHUNK_SIZE = 500;
@@ -61,26 +65,26 @@ public class BatchProcessingService {
      */
     public JobExecution executeBulkPayrollJob(YearMonth period) throws Exception {
         String jobName = "bulkPayrollJob_" + period.toString();
-        
-        Job job = jobBuilderFactory.get(jobName)
+
+        Job job = new JobBuilder(jobName, jobRepository)
                 .incrementer(new RunIdIncrementer())
                 .start(createPayrollCalculationStep())
                 .build();
-        
+
         JobParameters jobParameters = new JobParametersBuilder()
                 .addString("period", period.toString())
                 .addLong("timestamp", System.currentTimeMillis())
                 .toJobParameters();
-        
+
         try {
             JobExecution jobExecution = jobLauncher.run(job, jobParameters);
             activeJobs.put(jobName, jobExecution);
-            
+
             log.info("Started bulk payroll job: {} for period: {}", jobName, period);
             return jobExecution;
-            
-        } catch (JobExecutionAlreadyRunningException | JobRestartException | 
-                 JobInstanceAlreadyCompleteException | JobParametersInvalidException e) {
+
+        } catch (JobExecutionAlreadyRunningException | JobRestartException | JobInstanceAlreadyCompleteException
+                | JobParametersInvalidException e) {
             log.error("Error starting bulk payroll job for period: {}", period, e);
             throw e;
         }
@@ -90,8 +94,8 @@ public class BatchProcessingService {
      * Création du step de calcul de paie
      */
     private Step createPayrollCalculationStep() {
-        return stepBuilderFactory.get("payrollCalculationStep")
-                .<Employee, PayrollResult>chunk(DEFAULT_CHUNK_SIZE)
+        return new StepBuilder("payrollCalculationStep", jobRepository)
+                .<Employee, PayrollResult>chunk(DEFAULT_CHUNK_SIZE, transactionManager)
                 .reader(createEmployeeReader())
                 .processor(createPayrollProcessor())
                 .writer(createPayrollWriter())
@@ -116,23 +120,24 @@ public class BatchProcessingService {
             // Mapper les autres champs nécessaires
             return employee;
         });
-        
+
         try {
             SqlPagingQueryProviderFactoryBean factory = new SqlPagingQueryProviderFactoryBean();
             factory.setDataSource(dataSource);
-            factory.setSelectClause("SELECT id, employee_number, first_name, last_name, department, position, base_salary");
+            factory.setSelectClause(
+                    "SELECT id, employee_number, first_name, last_name, department, position, base_salary");
             factory.setFromClause("FROM employees");
             factory.setWhereClause("WHERE is_active = true");
             factory.setSortKey("id");
-            
+
             PagingQueryProvider queryProvider = factory.getObject();
             reader.setQueryProvider(queryProvider);
-            
+
         } catch (Exception e) {
             log.error("Error creating employee reader", e);
             throw new RuntimeException("Failed to create employee reader", e);
         }
-        
+
         return reader;
     }
 
@@ -146,12 +151,12 @@ public class BatchProcessingService {
                 try {
                     // Récupérer la période depuis les paramètres du job
                     YearMonth period = YearMonth.now(); // Simplification - devrait venir des paramètres
-                    
+
                     PayrollResult result = payrollCalculationService.calculatePayroll(employee.getId(), period);
-                    
+
                     log.debug("Processed payroll for employee: {}", employee.getId());
                     return result;
-                    
+
                 } catch (Exception e) {
                     log.warn("Error processing payroll for employee {}: {}", employee.getId(), e.getMessage());
                     // Retourner null pour skipper cet item
@@ -167,16 +172,16 @@ public class BatchProcessingService {
     private ItemWriter<PayrollResult> createPayrollWriter() {
         return new ItemWriter<PayrollResult>() {
             @Override
-            public void write(java.util.List<? extends PayrollResult> items) throws Exception {
-                for (PayrollResult result : items) {
+            public void write(Chunk<? extends PayrollResult> chunk) throws Exception {
+                for (PayrollResult result : chunk) {
                     if (result != null) {
                         // Sauvegarder le résultat en base de données
                         // Implémentation dépendante du modèle de données
                         log.debug("Saved payroll result for employee: {}", result.getEmployeeId());
                     }
                 }
-                
-                log.info("Wrote {} payroll results", items.size());
+
+                log.info("Wrote {} payroll results", chunk.size());
             }
         };
     }
@@ -186,25 +191,25 @@ public class BatchProcessingService {
      */
     public JobExecution executeDataExportJob(String entityType, String outputPath) throws Exception {
         String jobName = "dataExportJob_" + entityType + "_" + System.currentTimeMillis();
-        
-        Job job = jobBuilderFactory.get(jobName)
+
+        Job job = new JobBuilder(jobName, jobRepository)
                 .incrementer(new RunIdIncrementer())
                 .start(createDataExportStep(entityType, outputPath))
                 .build();
-        
+
         JobParameters jobParameters = new JobParametersBuilder()
                 .addString("entityType", entityType)
                 .addString("outputPath", outputPath)
                 .addLong("timestamp", System.currentTimeMillis())
                 .toJobParameters();
-        
+
         try {
             JobExecution jobExecution = jobLauncher.run(job, jobParameters);
             activeJobs.put(jobName, jobExecution);
-            
+
             log.info("Started data export job: {} for entity: {}", jobName, entityType);
             return jobExecution;
-            
+
         } catch (Exception e) {
             log.error("Error starting data export job for entity: {}", entityType, e);
             throw e;
@@ -215,8 +220,8 @@ public class BatchProcessingService {
      * Création du step d'export de données
      */
     private Step createDataExportStep(String entityType, String outputPath) {
-        return stepBuilderFactory.get("dataExportStep")
-                .<Object[], String>chunk(LARGE_CHUNK_SIZE)
+        return new StepBuilder("dataExportStep", jobRepository)
+                .<Object[], String>chunk(LARGE_CHUNK_SIZE, transactionManager)
                 .reader(createDataReader(entityType))
                 .processor(createDataProcessor())
                 .writer(createFileWriter(outputPath))
@@ -234,46 +239,46 @@ public class BatchProcessingService {
             // Mapper selon le type d'entité
             switch (entityType.toUpperCase()) {
                 case "EMPLOYEE":
-                    return new Object[]{
-                        rs.getLong("id"),
-                        rs.getString("employee_number"),
-                        rs.getString("first_name"),
-                        rs.getString("last_name"),
-                        rs.getString("department"),
-                        rs.getString("position")
+                    return new Object[] {
+                            rs.getLong("id"),
+                            rs.getString("employee_number"),
+                            rs.getString("first_name"),
+                            rs.getString("last_name"),
+                            rs.getString("department"),
+                            rs.getString("position")
                     };
                 default:
-                    return new Object[]{rs.getLong("id")};
+                    return new Object[] { rs.getLong("id") };
             }
         });
-        
+
         try {
             SqlPagingQueryProviderFactoryBean factory = new SqlPagingQueryProviderFactoryBean();
             factory.setDataSource(dataSource);
-            
+
             switch (entityType.toUpperCase()) {
                 case "EMPLOYEE":
                     factory.setSelectClause("SELECT id, employee_number, " +
-                        "pgp_sym_decrypt(first_name::bytea, :encryptionKey) as first_name, " +
-                        "pgp_sym_decrypt(last_name::bytea, :encryptionKey) as last_name, " +
-                        "department, position");
+                            "pgp_sym_decrypt(first_name::bytea, :encryptionKey) as first_name, " +
+                            "pgp_sym_decrypt(last_name::bytea, :encryptionKey) as last_name, " +
+                            "department, position");
                     factory.setFromClause("FROM employees");
                     factory.setWhereClause("WHERE is_active = true");
                     break;
                 default:
                     throw new IllegalArgumentException("Unsupported entity type: " + entityType);
             }
-            
+
             factory.setSortKey("id");
-            
+
             PagingQueryProvider queryProvider = factory.getObject();
             reader.setQueryProvider(queryProvider);
-            
+
         } catch (Exception e) {
             log.error("Error creating data reader for entity: {}", entityType, e);
             throw new RuntimeException("Failed to create data reader", e);
         }
-        
+
         return reader;
     }
 
@@ -287,7 +292,8 @@ public class BatchProcessingService {
                 // Convertir en format CSV
                 StringBuilder sb = new StringBuilder();
                 for (int i = 0; i < data.length; i++) {
-                    if (i > 0) sb.append(",");
+                    if (i > 0)
+                        sb.append(",");
                     sb.append(data[i] != null ? data[i].toString() : "");
                 }
                 return sb.toString();
@@ -306,12 +312,12 @@ public class BatchProcessingService {
                 setDelimiter(",");
                 setFieldExtractor(new BeanWrapperFieldExtractor<String>() {
                     {
-                        setNames(new String[]{"value"});
+                        setNames(new String[] { "value" });
                     }
                 });
             }
         });
-        
+
         return writer;
     }
 
@@ -320,25 +326,25 @@ public class BatchProcessingService {
      */
     public JobExecution executeDataCleanupJob(String entityType, int retentionDays) throws Exception {
         String jobName = "dataCleanupJob_" + entityType + "_" + System.currentTimeMillis();
-        
-        Job job = jobBuilderFactory.get(jobName)
+
+        Job job = new JobBuilder(jobName, jobRepository)
                 .incrementer(new RunIdIncrementer())
                 .start(createDataCleanupStep(entityType, retentionDays))
                 .build();
-        
+
         JobParameters jobParameters = new JobParametersBuilder()
                 .addString("entityType", entityType)
                 .addLong("retentionDays", (long) retentionDays)
                 .addLong("timestamp", System.currentTimeMillis())
                 .toJobParameters();
-        
+
         try {
             JobExecution jobExecution = jobLauncher.run(job, jobParameters);
             activeJobs.put(jobName, jobExecution);
-            
+
             log.info("Started data cleanup job: {} for entity: {}", jobName, entityType);
             return jobExecution;
-            
+
         } catch (Exception e) {
             log.error("Error starting data cleanup job for entity: {}", entityType, e);
             throw e;
@@ -349,24 +355,24 @@ public class BatchProcessingService {
      * Création du step de nettoyage
      */
     private Step createDataCleanupStep(String entityType, int retentionDays) {
-        return stepBuilderFactory.get("dataCleanupStep")
+        return new StepBuilder("dataCleanupStep", jobRepository)
                 .tasklet((contribution, chunkContext) -> {
                     try {
                         int deletedCount = executeCleanupQuery(entityType, retentionDays);
-                        
+
                         log.info("Cleaned up {} old records for entity: {}", deletedCount, entityType);
-                        
+
                         // Enregistrer les métriques
                         performanceMonitoringService.updateCustomGauge(
-                            "batch.cleanup." + entityType.toLowerCase() + ".deleted", deletedCount);
-                        
+                                "batch.cleanup." + entityType.toLowerCase() + ".deleted", deletedCount);
+
                         return RepeatStatus.FINISHED;
-                        
+
                     } catch (Exception e) {
                         log.error("Error during data cleanup for entity: {}", entityType, e);
                         throw e;
                     }
-                })
+                }, transactionManager)
                 .build();
     }
 
@@ -392,25 +398,25 @@ public class BatchProcessingService {
      */
     public JobExecution executeDataMigrationJob(String sourceTable, String targetTable) throws Exception {
         String jobName = "dataMigrationJob_" + sourceTable + "_to_" + targetTable + "_" + System.currentTimeMillis();
-        
-        Job job = jobBuilderFactory.get(jobName)
+
+        Job job = new JobBuilder(jobName, jobRepository)
                 .incrementer(new RunIdIncrementer())
                 .start(createDataMigrationStep(sourceTable, targetTable))
                 .build();
-        
+
         JobParameters jobParameters = new JobParametersBuilder()
                 .addString("sourceTable", sourceTable)
                 .addString("targetTable", targetTable)
                 .addLong("timestamp", System.currentTimeMillis())
                 .toJobParameters();
-        
+
         try {
             JobExecution jobExecution = jobLauncher.run(job, jobParameters);
             activeJobs.put(jobName, jobExecution);
-            
+
             log.info("Started data migration job: {} from {} to {}", jobName, sourceTable, targetTable);
             return jobExecution;
-            
+
         } catch (Exception e) {
             log.error("Error starting data migration job from {} to {}", sourceTable, targetTable, e);
             throw e;
@@ -421,8 +427,8 @@ public class BatchProcessingService {
      * Création du step de migration
      */
     private Step createDataMigrationStep(String sourceTable, String targetTable) {
-        return stepBuilderFactory.get("dataMigrationStep")
-                .<Map<String, Object>, Map<String, Object>>chunk(DEFAULT_CHUNK_SIZE)
+        return new StepBuilder("dataMigrationStep", jobRepository)
+                .<Map<String, Object>, Map<String, Object>>chunk(DEFAULT_CHUNK_SIZE, transactionManager)
                 .reader(createMigrationReader(sourceTable))
                 .processor(createMigrationProcessor())
                 .writer(createMigrationWriter(targetTable))
@@ -465,9 +471,9 @@ public class BatchProcessingService {
     private ItemWriter<Map<String, Object>> createMigrationWriter(String targetTable) {
         return new ItemWriter<Map<String, Object>>() {
             @Override
-            public void write(java.util.List<? extends Map<String, Object>> items) throws Exception {
+            public void write(Chunk<? extends Map<String, Object>> chunk) throws Exception {
                 // Écrire vers la table cible
-                log.info("Migrated {} records to {}", items.size(), targetTable);
+                log.info("Migrated {} records to {}", chunk.size(), targetTable);
             }
         };
     }
@@ -485,8 +491,8 @@ public class BatchProcessingService {
     public boolean stopJob(String jobName) {
         JobExecution jobExecution = activeJobs.get(jobName);
         if (jobExecution != null && jobExecution.isRunning()) {
-            jobExecution.stop();
-            log.info("Stopped job: {}", jobName);
+            jobExecution.setStatus(BatchStatus.STOPPING);
+            log.info("Requested stop for job: {}", jobName);
             return true;
         }
         return false;
@@ -504,25 +510,25 @@ public class BatchProcessingService {
      */
     public Map<String, Object> getBatchStatistics() {
         Map<String, Object> stats = new HashMap<>();
-        
+
         long runningJobs = activeJobs.values().stream()
-            .filter(JobExecution::isRunning)
-            .count();
-        
+                .filter(JobExecution::isRunning)
+                .count();
+
         long completedJobs = activeJobs.values().stream()
-            .filter(job -> job.getStatus() == BatchStatus.COMPLETED)
-            .count();
-        
+                .filter(job -> job.getStatus() == BatchStatus.COMPLETED)
+                .count();
+
         long failedJobs = activeJobs.values().stream()
-            .filter(job -> job.getStatus() == BatchStatus.FAILED)
-            .count();
-        
+                .filter(job -> job.getStatus() == BatchStatus.FAILED)
+                .count();
+
         stats.put("running_jobs", runningJobs);
         stats.put("completed_jobs", completedJobs);
         stats.put("failed_jobs", failedJobs);
         stats.put("total_jobs", activeJobs.size());
         stats.put("timestamp", LocalDateTime.now());
-        
+
         return stats;
     }
 
@@ -538,22 +544,25 @@ public class BatchProcessingService {
 
         @Override
         public ExitStatus afterStep(StepExecution stepExecution) {
-            log.info("Completed payroll calculation step: {} - Read: {}, Written: {}, Skipped: {}", 
+            log.info("Completed payroll calculation step: {} - Read: {}, Written: {}, Skipped: {}",
                     stepExecution.getStepName(),
                     stepExecution.getReadCount(),
                     stepExecution.getWriteCount(),
                     stepExecution.getSkipCount());
-            
-            performanceMonitoringService.updateCustomGauge("batch.payroll.last.read.count", stepExecution.getReadCount());
-            performanceMonitoringService.updateCustomGauge("batch.payroll.last.write.count", stepExecution.getWriteCount());
-            performanceMonitoringService.updateCustomGauge("batch.payroll.last.skip.count", stepExecution.getSkipCount());
-            
+
+            performanceMonitoringService.updateCustomGauge("batch.payroll.last.read.count",
+                    stepExecution.getReadCount());
+            performanceMonitoringService.updateCustomGauge("batch.payroll.last.write.count",
+                    stepExecution.getWriteCount());
+            performanceMonitoringService.updateCustomGauge("batch.payroll.last.skip.count",
+                    stepExecution.getSkipCount());
+
             if (stepExecution.getStatus() == BatchStatus.COMPLETED) {
                 performanceMonitoringService.incrementCustomCounter("batch.payroll.steps.completed");
             } else {
                 performanceMonitoringService.incrementCustomCounter("batch.payroll.steps.failed");
             }
-            
+
             return ExitStatus.COMPLETED;
         }
     }

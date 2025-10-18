@@ -7,6 +7,7 @@ import com.bantuops.backend.entity.Invoice;
 import com.bantuops.backend.entity.PayrollRecord;
 import com.bantuops.backend.repository.EmployeeRepository;
 import com.bantuops.backend.repository.InvoiceRepository;
+import com.bantuops.backend.repository.PayrollRecordRepository;
 import com.bantuops.backend.service.AuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +21,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Service pour la migration des données existantes vers le nouveau système backend sécurisé.
- * Gère la migration des employés, factures, et enregistrements de paie avec validation complète.
+ * Service pour la migration des données existantes vers le nouveau système
+ * backend sécurisé.
+ * Gère la migration des employés, factures, et enregistrements de paie avec
+ * validation complète.
  */
 @Service
 @RequiredArgsConstructor
@@ -30,10 +33,11 @@ public class DataMigrationService {
 
     private final EmployeeRepository employeeRepository;
     private final InvoiceRepository invoiceRepository;
+    private final PayrollRecordRepository payrollRecordRepository;
     private final EncryptionMigrationService encryptionMigrationService;
     private final ValidationMigrationService validationMigrationService;
     private final AuditService auditService;
-    
+
     private final Map<String, MigrationStatus> migrationStatusMap = new ConcurrentHashMap<>();
 
     /**
@@ -43,44 +47,48 @@ public class DataMigrationService {
     public CompletableFuture<MigrationResult> migrateAllData() {
         String migrationId = generateMigrationId();
         log.info("Démarrage de la migration complète des données - ID: {}", migrationId);
-        
+
         updateMigrationStatus(migrationId, MigrationStatus.IN_PROGRESS);
-        
+
         return CompletableFuture.supplyAsync(() -> {
             try {
                 MigrationResult result = new MigrationResult();
                 result.setMigrationId(migrationId);
                 result.setStartTime(LocalDateTime.now());
-                
+
                 // Migration des employés
                 log.info("Migration des données employés...");
                 MigrationResult.EntityMigrationResult employeeResult = migrateEmployees();
                 result.addEntityResult("employees", employeeResult);
-                
+
                 // Migration des factures
                 log.info("Migration des données factures...");
                 MigrationResult.EntityMigrationResult invoiceResult = migrateInvoices();
                 result.addEntityResult("invoices", invoiceResult);
-                
+
                 // Migration des enregistrements de paie
                 log.info("Migration des enregistrements de paie...");
                 MigrationResult.EntityMigrationResult payrollResult = migratePayrollRecords();
                 result.addEntityResult("payroll_records", payrollResult);
-                
+
                 result.setEndTime(LocalDateTime.now());
                 result.setSuccess(true);
-                
+
                 updateMigrationStatus(migrationId, MigrationStatus.COMPLETED);
-                auditService.logMigrationEvent("DATA_MIGRATION_COMPLETED", migrationId, result);
-                
+                auditService.logDataAccess("DATA_MIGRATION_COMPLETED",
+                        "Migration complète terminée avec succès",
+                        Map.of("migrationId", migrationId, "success", "true"));
+
                 log.info("Migration complète terminée avec succès - ID: {}", migrationId);
                 return result;
-                
+
             } catch (Exception e) {
                 log.error("Erreur lors de la migration des données - ID: {}", migrationId, e);
                 updateMigrationStatus(migrationId, MigrationStatus.FAILED);
-                auditService.logMigrationEvent("DATA_MIGRATION_FAILED", migrationId, e.getMessage());
-                
+                auditService.logDataAccess("DATA_MIGRATION_FAILED",
+                        "Échec de la migration des données",
+                        Map.of("migrationId", migrationId, "error", e.getMessage()));
+
                 MigrationResult errorResult = new MigrationResult();
                 errorResult.setMigrationId(migrationId);
                 errorResult.setSuccess(false);
@@ -96,27 +104,28 @@ public class DataMigrationService {
     @Transactional
     public MigrationResult.EntityMigrationResult migrateEmployees() {
         MigrationResult.EntityMigrationResult result = new MigrationResult.EntityMigrationResult();
-        
+
         try {
             List<Employee> employees = employeeRepository.findAll();
             log.info("Migration de {} employés", employees.size());
-            
+
             int processed = 0;
             int errors = 0;
-            
+
             for (Employee employee : employees) {
                 try {
                     // Validation des données avant migration
                     if (validationMigrationService.validateEmployeeData(employee)) {
                         // Chiffrement des données sensibles
                         Employee encryptedEmployee = encryptionMigrationService.encryptEmployeeData(employee);
-                        
+
                         // Sauvegarde de l'employé avec données chiffrées
                         employeeRepository.save(encryptedEmployee);
                         processed++;
-                        
-                        auditService.logMigrationEvent("EMPLOYEE_MIGRATED", employee.getId().toString(), 
-                            "Employé migré avec succès");
+
+                        auditService.logDataAccess("EMPLOYEE_MIGRATED",
+                                "Employé migré avec succès",
+                                Map.of("employeeId", employee.getId().toString()));
                     } else {
                         log.warn("Données invalides pour l'employé ID: {}", employee.getId());
                         errors++;
@@ -126,18 +135,18 @@ public class DataMigrationService {
                     errors++;
                 }
             }
-            
+
             result.setTotalRecords(employees.size());
             result.setProcessedRecords(processed);
             result.setErrorRecords(errors);
             result.setSuccess(errors == 0);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la migration des employés", e);
             result.setSuccess(false);
             result.setErrorMessage(e.getMessage());
         }
-        
+
         return result;
     }
 
@@ -147,27 +156,28 @@ public class DataMigrationService {
     @Transactional
     public MigrationResult.EntityMigrationResult migrateInvoices() {
         MigrationResult.EntityMigrationResult result = new MigrationResult.EntityMigrationResult();
-        
+
         try {
             List<Invoice> invoices = invoiceRepository.findAll();
             log.info("Migration de {} factures", invoices.size());
-            
+
             int processed = 0;
             int errors = 0;
-            
+
             for (Invoice invoice : invoices) {
                 try {
                     // Validation des données de facture
                     if (validationMigrationService.validateInvoiceData(invoice)) {
                         // Chiffrement des montants sensibles
                         Invoice encryptedInvoice = encryptionMigrationService.encryptInvoiceData(invoice);
-                        
+
                         // Sauvegarde avec données chiffrées
                         invoiceRepository.save(encryptedInvoice);
                         processed++;
-                        
-                        auditService.logMigrationEvent("INVOICE_MIGRATED", invoice.getId().toString(),
-                            "Facture migrée avec succès");
+
+                        auditService.logDataAccess("INVOICE_MIGRATED",
+                                "Facture migrée avec succès",
+                                Map.of("invoiceId", invoice.getId().toString()));
                     } else {
                         log.warn("Données invalides pour la facture ID: {}", invoice.getId());
                         errors++;
@@ -177,18 +187,18 @@ public class DataMigrationService {
                     errors++;
                 }
             }
-            
+
             result.setTotalRecords(invoices.size());
             result.setProcessedRecords(processed);
             result.setErrorRecords(errors);
             result.setSuccess(errors == 0);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la migration des factures", e);
             result.setSuccess(false);
             result.setErrorMessage(e.getMessage());
         }
-        
+
         return result;
     }
 
@@ -198,49 +208,50 @@ public class DataMigrationService {
     @Transactional
     public MigrationResult.EntityMigrationResult migratePayrollRecords() {
         MigrationResult.EntityMigrationResult result = new MigrationResult.EntityMigrationResult();
-        
+
         try {
             List<PayrollRecord> payrollRecords = payrollRecordRepository.findAll();
             log.info("Migration de {} enregistrements de paie", payrollRecords.size());
-            
+
             int processed = 0;
             int errors = 0;
-            
+
             for (PayrollRecord payrollRecord : payrollRecords) {
                 try {
                     // Validation des données de paie
                     if (validationMigrationService.validatePayrollData(payrollRecord)) {
                         // Chiffrement des données salariales sensibles
                         PayrollRecord encryptedPayroll = encryptionMigrationService.encryptPayrollData(payrollRecord);
-                        
+
                         // Sauvegarde avec données chiffrées
                         payrollRecordRepository.save(encryptedPayroll);
                         processed++;
-                        
-                        auditService.logMigrationEvent("PAYROLL_MIGRATED", payrollRecord.getId().toString(),
-                            "Enregistrement de paie migré avec succès");
+
+                        auditService.logDataAccess("PAYROLL_MIGRATED",
+                                "Enregistrement de paie migré avec succès",
+                                Map.of("payrollId", payrollRecord.getId().toString()));
                     } else {
                         log.warn("Données invalides pour l'enregistrement de paie ID: {}", payrollRecord.getId());
                         errors++;
                     }
                 } catch (Exception e) {
-                    log.error("Erreur lors de la migration de l'enregistrement de paie ID: {}", 
-                        payrollRecord.getId(), e);
+                    log.error("Erreur lors de la migration de l'enregistrement de paie ID: {}",
+                            payrollRecord.getId(), e);
                     errors++;
                 }
             }
-            
+
             result.setTotalRecords(payrollRecords.size());
             result.setProcessedRecords(processed);
             result.setErrorRecords(errors);
             result.setSuccess(errors == 0);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la migration des enregistrements de paie", e);
             result.setSuccess(false);
             result.setErrorMessage(e.getMessage());
         }
-        
+
         return result;
     }
 
