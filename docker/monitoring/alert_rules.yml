@@ -1,0 +1,181 @@
+# Règles d'alerte pour BantuOps Backend
+
+groups:
+  - name: bantuops.application
+    rules:
+      # Alerte si l'application est down
+      - alert: BantuOpsApplicationDown
+        expr: up{job="bantuops-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: bantuops-backend
+        annotations:
+          summary: "BantuOps Backend est inaccessible"
+          description: "L'application BantuOps Backend n'a pas répondu aux health checks depuis plus d'1 minute."
+
+      # Alerte sur l'utilisation mémoire élevée
+      - alert: BantuOpsHighMemoryUsage
+        expr: (jvm_memory_used_bytes{job="bantuops-backend"} / jvm_memory_max_bytes{job="bantuops-backend"}) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: bantuops-backend
+        annotations:
+          summary: "Utilisation mémoire élevée pour BantuOps Backend"
+          description: "L'utilisation mémoire de BantuOps Backend est à {{ $value }}% depuis plus de 5 minutes."
+
+      # Alerte sur l'utilisation CPU élevée
+      - alert: BantuOpsHighCPUUsage
+        expr: system_cpu_usage{job="bantuops-backend"} * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: bantuops-backend
+        annotations:
+          summary: "Utilisation CPU élevée pour BantuOps Backend"
+          description: "L'utilisation CPU de BantuOps Backend est à {{ $value }}% depuis plus de 5 minutes."
+
+      # Alerte sur les erreurs HTTP élevées
+      - alert: BantuOpsHighErrorRate
+        expr: rate(http_server_requests_seconds_count{job="bantuops-backend",status=~"5.."}[5m]) / rate(http_server_requests_seconds_count{job="bantuops-backend"}[5m]) * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: bantuops-backend
+        annotations:
+          summary: "Taux d'erreur élevé pour BantuOps Backend"
+          description: "Le taux d'erreur HTTP 5xx est à {{ $value }}% depuis plus de 2 minutes."
+
+      # Alerte sur la latence élevée
+      - alert: BantuOpsHighLatency
+        expr: histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{job="bantuops-backend"}[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+          service: bantuops-backend
+        annotations:
+          summary: "Latence élevée pour BantuOps Backend"
+          description: "Le 95e percentile de latence est à {{ $value }}s depuis plus de 3 minutes."
+
+  - name: bantuops.database
+    rules:
+      # Alerte si PostgreSQL est down
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL est inaccessible"
+          description: "La base de données PostgreSQL n'a pas répondu aux health checks depuis plus d'1 minute."
+
+      # Alerte sur les connexions élevées
+      - alert: PostgreSQLHighConnections
+        expr: pg_stat_database_numbackends{job="postgres"} / pg_settings_max_connections{job="postgres"} * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "Nombre de connexions PostgreSQL élevé"
+          description: "Le nombre de connexions PostgreSQL est à {{ $value }}% de la limite depuis plus de 5 minutes."
+
+      # Alerte sur l'espace disque faible
+      - alert: PostgreSQLLowDiskSpace
+        expr: (pg_database_size_bytes{job="postgres"} / (1024*1024*1024)) > 8
+        for: 10m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: "Espace disque PostgreSQL faible"
+          description: "La base de données PostgreSQL utilise {{ $value }}GB d'espace disque."
+
+  - name: bantuops.redis
+    rules:
+      # Alerte si Redis est down
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis est inaccessible"
+          description: "Redis n'a pas répondu aux health checks depuis plus d'1 minute."
+
+      # Alerte sur l'utilisation mémoire Redis élevée
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes{job="redis"} / redis_memory_max_bytes{job="redis"} * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Utilisation mémoire Redis élevée"
+          description: "L'utilisation mémoire de Redis est à {{ $value }}% depuis plus de 5 minutes."
+
+      # Alerte sur les connexions Redis élevées
+      - alert: RedisHighConnections
+        expr: redis_connected_clients{job="redis"} > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Nombre de connexions Redis élevé"
+          description: "Redis a {{ $value }} connexions actives depuis plus de 5 minutes."
+
+  - name: bantuops.security
+    rules:
+      # Alerte sur les tentatives de connexion échouées
+      - alert: BantuOpsHighFailedLogins
+        expr: increase(bantuops_security_failed_logins_total{job="bantuops-backend"}[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          service: bantuops-backend
+          category: security
+        annotations:
+          summary: "Tentatives de connexion échouées élevées"
+          description: "{{ $value }} tentatives de connexion échouées détectées dans les 5 dernières minutes."
+
+      # Alerte sur les violations de sécurité
+      - alert: BantuOpsSecurityViolation
+        expr: increase(bantuops_security_violations_total{job="bantuops-backend"}[1m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: bantuops-backend
+          category: security
+        annotations:
+          summary: "Violation de sécurité détectée"
+          description: "{{ $value }} violation(s) de sécurité détectée(s) dans la dernière minute."
+
+  - name: bantuops.business
+    rules:
+      # Alerte sur les erreurs de calcul de paie
+      - alert: BantuOpsPayrollCalculationErrors
+        expr: increase(bantuops_payroll_calculation_errors_total{job="bantuops-backend"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: bantuops-backend
+          category: business
+        annotations:
+          summary: "Erreurs de calcul de paie détectées"
+          description: "{{ $value }} erreur(s) de calcul de paie détectée(s) dans les 5 dernières minutes."
+
+      # Alerte sur les échecs de chiffrement
+      - alert: BantuOpsEncryptionFailures
+        expr: increase(bantuops_encryption_failures_total{job="bantuops-backend"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: bantuops-backend
+          category: security
+        annotations:
+          summary: "Échecs de chiffrement détectés"
+          description: "{{ $value }} échec(s) de chiffrement détecté(s) dans les 5 dernières minutes."
