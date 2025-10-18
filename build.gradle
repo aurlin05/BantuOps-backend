@@ -22,6 +22,11 @@ configurations {
 	compileOnly {
 		extendsFrom annotationProcessor
 	}
+	all {
+		resolutionStrategy {
+			force 'com.graphql-java:java-dataloader:3.3.0'
+		}
+	}
 }
 
 repositories {
@@ -80,6 +85,10 @@ dependencies {
 	// OpenAPI/Swagger dependencies
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:2.3.0'
+	
+	// Actuator for metrics and health checks
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	runtimeOnly 'org.postgresql:postgresql'

@@ -18,7 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Système de réponse automatique aux incidents de sécurité
- * Applique des mesures correctives automatiques en fonction du type et de la sévérité des alertes
+ * Applique des mesures correctives automatiques en fonction du type et de la
+ * sévérité des alertes
  */
 @Service
 @RequiredArgsConstructor
@@ -36,13 +37,12 @@ public class AutomaticSecurityResponseSystem {
 
     // Configuration des réponses automatiques
     private static final Map<SecurityAlert.AlertType, ResponseAction> RESPONSE_ACTIONS = Map.of(
-        SecurityAlert.AlertType.FAILED_LOGIN_ATTEMPT, ResponseAction.RATE_LIMIT,
-        SecurityAlert.AlertType.UNAUTHORIZED_ACCESS, ResponseAction.SESSION_INVALIDATION,
-        SecurityAlert.AlertType.SENSITIVE_DATA_MODIFICATION, ResponseAction.AUDIT_ENHANCEMENT,
-        SecurityAlert.AlertType.ABNORMAL_ACTIVITY, ResponseAction.USER_MONITORING,
-        SecurityAlert.AlertType.SECURITY_BREACH, ResponseAction.EMERGENCY_LOCKDOWN,
-        SecurityAlert.AlertType.SYSTEM_COMPROMISE, ResponseAction.FULL_SYSTEM_PROTECTION
-    );
+            SecurityAlert.AlertType.FAILED_LOGIN_ATTEMPT, ResponseAction.RATE_LIMIT,
+            SecurityAlert.AlertType.UNAUTHORIZED_ACCESS, ResponseAction.SESSION_INVALIDATION,
+            SecurityAlert.AlertType.SENSITIVE_DATA_MODIFICATION, ResponseAction.AUDIT_ENHANCEMENT,
+            SecurityAlert.AlertType.ABNORMAL_ACTIVITY, ResponseAction.USER_MONITORING,
+            SecurityAlert.AlertType.SECURITY_BREACH, ResponseAction.EMERGENCY_LOCKDOWN,
+            SecurityAlert.AlertType.SYSTEM_COMPROMISE, ResponseAction.FULL_SYSTEM_PROTECTION);
 
     /**
      * Déclenche une réponse automatique pour une alerte critique
@@ -51,8 +51,8 @@ public class AutomaticSecurityResponseSystem {
     @Transactional
     public void triggerAutomaticResponse(SecurityAlert alert) {
         try {
-            log.error("Déclenchement de la réponse automatique pour l'alerte critique: {}", 
-                alert.getId());
+            log.error("Déclenchement de la réponse automatique pour l'alerte critique: {}",
+                    alert.getId());
 
             // Déterminer l'action de réponse appropriée
             ResponseAction action = determineResponseAction(alert);
@@ -80,7 +80,7 @@ public class AutomaticSecurityResponseSystem {
      */
     private ResponseAction determineResponseAction(SecurityAlert alert) {
         ResponseAction baseAction = RESPONSE_ACTIONS.getOrDefault(
-            alert.getAlertType(), ResponseAction.STANDARD_MONITORING);
+                alert.getAlertType(), ResponseAction.STANDARD_MONITORING);
 
         // Escalader l'action selon la sévérité
         if (alert.getSeverity() == SecurityAlert.Severity.CRITICAL) {
@@ -154,16 +154,16 @@ public class AutomaticSecurityResponseSystem {
         String userId = alert.getUserId();
         String ipAddress = alert.getIpAddress();
 
-        log.info("Application de la limitation de débit pour l'utilisateur: {} depuis l'IP: {}", 
-            userId, ipAddress);
+        log.info("Application de la limitation de débit pour l'utilisateur: {} depuis l'IP: {}",
+                userId, ipAddress);
 
         // Implémenter la limitation de débit (exemple avec Redis)
         sessionManagementService.applyRateLimit(userId, ipAddress, 10, 60); // 10 requêtes par minute
 
         // Notifier l'utilisateur
-        notificationService.sendUserNotification(userId, 
-            "Limitation de débit appliquée",
-            "Votre compte a été temporairement limité en raison d'une activité suspecte.");
+        notificationService.sendUserNotification(userId,
+                "Limitation de débit appliquée",
+                "Votre compte a été temporairement limité en raison d'une activité suspecte.");
     }
 
     /**
@@ -171,7 +171,7 @@ public class AutomaticSecurityResponseSystem {
      */
     private void blockSuspiciousIp(SecurityAlert alert) {
         String ipAddress = alert.getIpAddress();
-        
+
         log.warn("Blocage de l'IP suspecte: {}", ipAddress);
 
         // Ajouter l'IP à la liste noire
@@ -181,10 +181,9 @@ public class AutomaticSecurityResponseSystem {
         sessionManagementService.invalidateSessionsByIp(ipAddress);
 
         // Créer une alerte pour l'équipe de sécurité
-        notificationService.sendSecurityTeamAlert(
-            "IP bloquée automatiquement",
-            String.format("L'IP %s a été bloquée automatiquement suite à une activité suspecte", ipAddress)
-        );
+        notificationService.sendSecurityTeamNotification(
+                "IP bloquée automatiquement",
+                String.format("L'IP %s a été bloquée automatiquement suite à une activité suspecte", ipAddress));
     }
 
     /**
@@ -192,7 +191,7 @@ public class AutomaticSecurityResponseSystem {
      */
     private void invalidateUserSessions(SecurityAlert alert) {
         String userId = alert.getUserId();
-        
+
         log.info("Invalidation des sessions pour l'utilisateur: {}", userId);
 
         // Invalider toutes les sessions actives
@@ -203,9 +202,9 @@ public class AutomaticSecurityResponseSystem {
 
         // Notifier l'utilisateur
         notificationService.sendUserNotification(userId,
-            "Sessions fermées pour sécurité",
-            "Vos sessions ont été fermées automatiquement suite à une activité suspecte. " +
-            "Veuillez vous reconnecter.");
+                "Sessions fermées pour sécurité",
+                "Vos sessions ont été fermées automatiquement suite à une activité suspecte. " +
+                        "Veuillez vous reconnecter.");
     }
 
     /**
@@ -214,7 +213,7 @@ public class AutomaticSecurityResponseSystem {
     @Transactional
     private void suspendUserAccount(SecurityAlert alert) {
         String userId = alert.getUserId();
-        
+
         log.warn("Suspension automatique du compte utilisateur: {}", userId);
 
         userRepository.findByUsername(userId).ifPresent(user -> {
@@ -229,14 +228,13 @@ public class AutomaticSecurityResponseSystem {
 
         // Notifier l'utilisateur et les administrateurs
         notificationService.sendUserNotification(userId,
-            "Compte suspendu temporairement",
-            "Votre compte a été suspendu automatiquement pour 24h suite à une alerte de sécurité. " +
-            "Contactez l'administrateur pour plus d'informations.");
+                "Compte suspendu temporairement",
+                "Votre compte a été suspendu automatiquement pour 24h suite à une alerte de sécurité. " +
+                        "Contactez l'administrateur pour plus d'informations.");
 
         notificationService.sendAdminNotification(
-            "Suspension automatique de compte",
-            String.format("Le compte %s a été suspendu automatiquement", userId)
-        );
+                "Suspension automatique de compte",
+                String.format("Le compte %s a été suspendu automatiquement", userId));
     }
 
     /**
@@ -245,7 +243,7 @@ public class AutomaticSecurityResponseSystem {
     @Transactional
     private void lockdownUserAccount(SecurityAlert alert) {
         String userId = alert.getUserId();
-        
+
         log.error("Verrouillage complet du compte utilisateur: {}", userId);
 
         userRepository.findByUsername(userId).ifPresent(user -> {
@@ -261,9 +259,8 @@ public class AutomaticSecurityResponseSystem {
 
         // Notification d'urgence
         notificationService.sendCriticalAlert(
-            "Compte verrouillé automatiquement",
-            String.format("Le compte %s a été verrouillé automatiquement suite à une alerte critique", userId)
-        );
+                "Compte verrouillé automatiquement",
+                String.format("Le compte %s a été verrouillé automatiquement suite à une alerte critique", userId));
     }
 
     /**
@@ -271,7 +268,7 @@ public class AutomaticSecurityResponseSystem {
      */
     private void enhanceAuditLogging(SecurityAlert alert) {
         String userId = alert.getUserId();
-        
+
         log.info("Amélioration de l'audit pour l'utilisateur: {}", userId);
 
         // Activer l'audit détaillé pour cet utilisateur
@@ -282,9 +279,8 @@ public class AutomaticSecurityResponseSystem {
 
         // Notifier l'équipe de sécurité
         notificationService.sendSecurityTeamNotification(
-            "Audit renforcé activé",
-            String.format("L'audit détaillé a été activé pour l'utilisateur %s", userId)
-        );
+                "Audit renforcé activé",
+                String.format("L'audit détaillé a été activé pour l'utilisateur %s", userId));
     }
 
     /**
@@ -292,7 +288,7 @@ public class AutomaticSecurityResponseSystem {
      */
     private void activateDataProtectionMode(SecurityAlert alert) {
         String userId = alert.getUserId();
-        
+
         log.warn("Activation du mode de protection des données pour l'utilisateur: {}", userId);
 
         // Restreindre l'accès aux données sensibles
@@ -301,14 +297,14 @@ public class AutomaticSecurityResponseSystem {
         // Exiger une double authentification
         sessionManagementService.requireTwoFactorAuth(userId);
 
-        // Chiffrer toutes les nouvelles données
-        encryptionService.enableEnhancedEncryption();
+        // TODO: Implement enhanced encryption mode in DataEncryptionService
+        // encryptionService.enableEnhancedEncryption();
+        log.info("Enhanced encryption would be enabled here for user: {}", userId);
 
         // Notification
-        notificationService.sendSecurityTeamAlert(
-            "Mode protection des données activé",
-            String.format("Le mode de protection des données a été activé suite à l'alerte pour %s", userId)
-        );
+        notificationService.sendSecurityTeamNotification(
+                "Mode protection des données activé",
+                String.format("Le mode de protection des données a été activé suite à l'alerte pour %s", userId));
     }
 
     /**
@@ -316,7 +312,7 @@ public class AutomaticSecurityResponseSystem {
      */
     private void activateUserMonitoring(SecurityAlert alert) {
         String userId = alert.getUserId();
-        
+
         log.info("Activation de la surveillance renforcée pour l'utilisateur: {}", userId);
 
         // Surveiller toutes les actions de l'utilisateur
@@ -327,9 +323,8 @@ public class AutomaticSecurityResponseSystem {
 
         // Notification
         notificationService.sendSecurityTeamNotification(
-            "Surveillance renforcée activée",
-            String.format("La surveillance renforcée a été activée pour l'utilisateur %s", userId)
-        );
+                "Surveillance renforcée activée",
+                String.format("La surveillance renforcée a été activée pour l'utilisateur %s", userId));
     }
 
     /**
@@ -349,9 +344,8 @@ public class AutomaticSecurityResponseSystem {
 
         // Notification d'urgence à tous les administrateurs
         notificationService.sendEmergencyNotificationToAllAdmins(
-            "VERROUILLAGE D'URGENCE ACTIVÉ",
-            "Un verrouillage d'urgence a été initié automatiquement suite à une alerte critique"
-        );
+                "VERROUILLAGE D'URGENCE ACTIVÉ",
+                "Un verrouillage d'urgence a été initié automatiquement suite à une alerte critique");
     }
 
     /**
@@ -363,8 +357,9 @@ public class AutomaticSecurityResponseSystem {
         // Arrêter tous les services non essentiels
         sessionManagementService.stopNonEssentialServices();
 
-        // Activer le chiffrement renforcé
-        encryptionService.enableMaximumEncryption();
+        // TODO: Implement maximum encryption mode in DataEncryptionService
+        // encryptionService.enableMaximumEncryption();
+        log.error("Maximum encryption would be enabled here");
 
         // Sauvegarder les données critiques
         sessionManagementService.initiateEmergencyBackup();
@@ -374,9 +369,8 @@ public class AutomaticSecurityResponseSystem {
 
         // Notification d'urgence maximale
         notificationService.sendCriticalSystemAlert(
-            "PROTECTION SYSTÈME MAXIMALE ACTIVÉE",
-            "La protection complète du système a été activée automatiquement"
-        );
+                "PROTECTION SYSTÈME MAXIMALE ACTIVÉE",
+                "La protection complète du système a été activée automatiquement");
     }
 
     /**
@@ -384,7 +378,7 @@ public class AutomaticSecurityResponseSystem {
      */
     private void activateStandardMonitoring(SecurityAlert alert) {
         String userId = alert.getUserId();
-        
+
         log.info("Activation de la surveillance standard pour l'utilisateur: {}", userId);
 
         // Surveiller les actions de l'utilisateur
@@ -396,21 +390,21 @@ public class AutomaticSecurityResponseSystem {
      */
     private AutomaticResponse createAutomaticResponse(SecurityAlert alert, ResponseAction action) {
         return AutomaticResponse.builder()
-            .alertId(alert.getId())
-            .userId(alert.getUserId())
-            .alertType(alert.getAlertType())
-            .responseAction(action)
-            .triggeredAt(LocalDateTime.now())
-            .status(AutomaticResponse.Status.ACTIVE)
-            .build();
+                .alertId(alert.getId())
+                .userId(alert.getUserId())
+                .alertType(alert.getAlertType())
+                .responseAction(action)
+                .triggeredAt(LocalDateTime.now())
+                .status(AutomaticResponse.Status.ACTIVE)
+                .build();
     }
 
     /**
      * Enregistre la réponse automatique dans les logs
      */
     private void logAutomaticResponse(SecurityAlert alert, ResponseAction action) {
-        log.info("Réponse automatique enregistrée - Alerte: {}, Action: {}, Utilisateur: {}", 
-            alert.getId(), action, alert.getUserId());
+        log.info("Réponse automatique enregistrée - Alerte: {}, Action: {}, Utilisateur: {}",
+                alert.getId(), action, alert.getUserId());
     }
 
     /**
@@ -418,10 +412,9 @@ public class AutomaticSecurityResponseSystem {
      */
     private void notifyAdministrators(SecurityAlert alert, ResponseAction action) {
         notificationService.sendAdminNotification(
-            "Réponse automatique déclenchée",
-            String.format("Action automatique %s déclenchée pour l'alerte %s (utilisateur: %s)", 
-                action, alert.getId(), alert.getUserId())
-        );
+                "Réponse automatique déclenchée",
+                String.format("Action automatique %s déclenchée pour l'alerte %s (utilisateur: %s)",
+                        action, alert.getId(), alert.getUserId()));
     }
 
     /**

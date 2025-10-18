@@ -22,7 +22,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -46,20 +45,19 @@ public class EmployeeController {
      * Crée un nouvel employé
      */
     @PostMapping
-    @Operation(summary = "Créer un employé", 
-               description = "Crée un nouvel employé avec validation complète des données")
+    @Operation(summary = "Créer un employé", description = "Crée un nouvel employé avec validation complète des données")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "201", description = "Employé créé avec succès"),
-        @ApiResponse(responseCode = "400", description = "Données d'employé invalides"),
-        @ApiResponse(responseCode = "403", description = "Accès non autorisé"),
-        @ApiResponse(responseCode = "409", description = "Employé déjà existant")
+            @ApiResponse(responseCode = "201", description = "Employé créé avec succès"),
+            @ApiResponse(responseCode = "400", description = "Données d'employé invalides"),
+            @ApiResponse(responseCode = "403", description = "Accès non autorisé"),
+            @ApiResponse(responseCode = "409", description = "Employé déjà existant")
     })
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<Employee> createEmployee(
             @Valid @RequestBody EmployeeRequest request) {
-        
+
         log.info("Création d'un nouvel employé: {} {}", request.getFirstName(), request.getLastName());
-        
+
         try {
             // Validation des règles métier
             var validationResult = businessRuleValidator.validateEmployeeData(request);
@@ -83,10 +81,10 @@ public class EmployeeController {
             // Création de l'employé
             Employee employee = createEmployeeFromRequest(request);
             Employee savedEmployee = employeeRepository.save(employee);
-            
+
             log.info("Employé créé avec succès: ID {}", savedEmployee.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(savedEmployee);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la création de l'employé: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -97,16 +95,14 @@ public class EmployeeController {
      * Met à jour un employé existant
      */
     @PutMapping("/{employeeId}")
-    @Operation(summary = "Mettre à jour un employé", 
-               description = "Met à jour les informations d'un employé existant")
+    @Operation(summary = "Mettre à jour un employé", description = "Met à jour les informations d'un employé existant")
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<Employee> updateEmployee(
-            @Parameter(description = "ID de l'employé") 
-            @PathVariable Long employeeId,
+            @Parameter(description = "ID de l'employé") @PathVariable Long employeeId,
             @Valid @RequestBody EmployeeRequest request) {
-        
+
         log.info("Mise à jour de l'employé {}: {} {}", employeeId, request.getFirstName(), request.getLastName());
-        
+
         try {
             Optional<Employee> existingEmployee = employeeRepository.findById(employeeId);
             if (existingEmployee.isEmpty()) {
@@ -124,10 +120,10 @@ public class EmployeeController {
             // Mise à jour de l'employé
             Employee employee = updateEmployeeFromRequest(existingEmployee.get(), request);
             Employee updatedEmployee = employeeRepository.save(employee);
-            
+
             log.info("Employé mis à jour avec succès: ID {}", updatedEmployee.getId());
             return ResponseEntity.ok(updatedEmployee);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la mise à jour de l'employé: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -138,24 +134,22 @@ public class EmployeeController {
      * Récupère un employé par son ID
      */
     @GetMapping("/{employeeId}")
-    @Operation(summary = "Récupérer un employé", 
-               description = "Récupère les détails d'un employé par son ID")
+    @Operation(summary = "Récupérer un employé", description = "Récupère les détails d'un employé par son ID")
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<Employee> getEmployee(
-            @Parameter(description = "ID de l'employé") 
-            @PathVariable Long employeeId) {
-        
+            @Parameter(description = "ID de l'employé") @PathVariable Long employeeId) {
+
         log.info("Récupération de l'employé {}", employeeId);
-        
+
         try {
             Optional<Employee> employee = employeeRepository.findById(employeeId);
             if (employee.isEmpty()) {
                 log.warn("Employé non trouvé: {}", employeeId);
                 return ResponseEntity.notFound().build();
             }
-            
+
             return ResponseEntity.ok(employee.get());
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la récupération de l'employé: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -166,26 +160,23 @@ public class EmployeeController {
      * Récupère la liste des employés avec pagination
      */
     @GetMapping
-    @Operation(summary = "Lister les employés", 
-               description = "Récupère la liste paginée des employés")
+    @Operation(summary = "Lister les employés", description = "Récupère la liste paginée des employés")
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<Page<Employee>> getEmployees(
             @PageableDefault(size = 20) Pageable pageable,
-            @Parameter(description = "Filtrer par statut actif") 
-            @RequestParam(required = false) Boolean isActive,
-            @Parameter(description = "Filtrer par département") 
-            @RequestParam(required = false) String department,
-            @Parameter(description = "Recherche par nom") 
-            @RequestParam(required = false) String search) {
-        
+            @Parameter(description = "Filtrer par statut actif") @RequestParam(required = false) Boolean isActive,
+            @Parameter(description = "Filtrer par département") @RequestParam(required = false) String department,
+            @Parameter(description = "Recherche par nom") @RequestParam(required = false) String search) {
+
         log.info("Récupération de la liste des employés");
-        
+
         try {
             Page<Employee> employees;
-            
+
             if (search != null && !search.trim().isEmpty()) {
-                employees = employeeRepository.findByPersonalInfoFirstNameContainingIgnoreCaseOrPersonalInfoLastNameContainingIgnoreCase(
-                    search, search, pageable);
+                employees = employeeRepository
+                        .findByPersonalInfoFirstNameContainingIgnoreCaseOrPersonalInfoLastNameContainingIgnoreCase(
+                                search, search, pageable);
             } else if (department != null && !department.trim().isEmpty()) {
                 employees = employeeRepository.findByEmploymentInfoDepartment(department, pageable);
             } else if (isActive != null) {
@@ -193,9 +184,9 @@ public class EmployeeController {
             } else {
                 employees = employeeRepository.findAll(pageable);
             }
-            
+
             return ResponseEntity.ok(employees);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la récupération des employés: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -206,15 +197,13 @@ public class EmployeeController {
      * Désactive un employé (soft delete)
      */
     @PatchMapping("/{employeeId}/deactivate")
-    @Operation(summary = "Désactiver un employé", 
-               description = "Désactive un employé sans le supprimer définitivement")
+    @Operation(summary = "Désactiver un employé", description = "Désactive un employé sans le supprimer définitivement")
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<Employee> deactivateEmployee(
-            @Parameter(description = "ID de l'employé") 
-            @PathVariable Long employeeId) {
-        
+            @Parameter(description = "ID de l'employé") @PathVariable Long employeeId) {
+
         log.info("Désactivation de l'employé {}", employeeId);
-        
+
         try {
             Optional<Employee> existingEmployee = employeeRepository.findById(employeeId);
             if (existingEmployee.isEmpty()) {
@@ -223,12 +212,12 @@ public class EmployeeController {
             }
 
             Employee employee = existingEmployee.get();
-            employee.getEmploymentInfo().setIsActive(false);
+            employee.setIsActive(false);
             Employee deactivatedEmployee = employeeRepository.save(employee);
-            
+
             log.info("Employé désactivé avec succès: ID {}", deactivatedEmployee.getId());
             return ResponseEntity.ok(deactivatedEmployee);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la désactivation de l'employé: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -239,15 +228,13 @@ public class EmployeeController {
      * Réactive un employé
      */
     @PatchMapping("/{employeeId}/activate")
-    @Operation(summary = "Réactiver un employé", 
-               description = "Réactive un employé précédemment désactivé")
+    @Operation(summary = "Réactiver un employé", description = "Réactive un employé précédemment désactivé")
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<Employee> activateEmployee(
-            @Parameter(description = "ID de l'employé") 
-            @PathVariable Long employeeId) {
-        
+            @Parameter(description = "ID de l'employé") @PathVariable Long employeeId) {
+
         log.info("Réactivation de l'employé {}", employeeId);
-        
+
         try {
             Optional<Employee> existingEmployee = employeeRepository.findById(employeeId);
             if (existingEmployee.isEmpty()) {
@@ -256,12 +243,12 @@ public class EmployeeController {
             }
 
             Employee employee = existingEmployee.get();
-            employee.getEmploymentInfo().setIsActive(true);
+            employee.setIsActive(true);
             Employee activatedEmployee = employeeRepository.save(employee);
-            
+
             log.info("Employé réactivé avec succès: ID {}", activatedEmployee.getId());
             return ResponseEntity.ok(activatedEmployee);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la réactivation de l'employé: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -272,25 +259,23 @@ public class EmployeeController {
      * Valide les données d'un employé
      */
     @PostMapping("/validate")
-    @Operation(summary = "Valider les données d'employé", 
-               description = "Valide les données d'employé selon les règles métier sénégalaises")
+    @Operation(summary = "Valider les données d'employé", description = "Valide les données d'employé selon les règles métier sénégalaises")
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<Map<String, Object>> validateEmployeeData(
             @Valid @RequestBody EmployeeRequest request) {
-        
+
         log.info("Validation des données pour l'employé: {} {}", request.getFirstName(), request.getLastName());
-        
+
         try {
             var validationResult = businessRuleValidator.validateEmployeeData(request);
-            
+
             Map<String, Object> response = Map.of(
-                "valid", validationResult.isValid(),
-                "errors", validationResult.getErrors(),
-                "warnings", validationResult.getWarnings()
-            );
-            
+                    "valid", validationResult.isValid(),
+                    "errors", validationResult.getErrors(),
+                    "warnings", validationResult.getWarnings());
+
             return ResponseEntity.ok(response);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la validation: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -301,21 +286,20 @@ public class EmployeeController {
      * Recherche d'employés par critères
      */
     @PostMapping("/search")
-    @Operation(summary = "Rechercher des employés", 
-               description = "Recherche d'employés selon des critères avancés")
+    @Operation(summary = "Rechercher des employés", description = "Recherche d'employés selon des critères avancés")
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<Page<Employee>> searchEmployees(
             @RequestBody Map<String, Object> searchCriteria,
             @PageableDefault(size = 20) Pageable pageable) {
-        
+
         log.info("Recherche d'employés avec critères: {}", searchCriteria);
-        
+
         try {
             // Implémentation de la recherche avancée
             Page<Employee> employees = employeeRepository.findAll(pageable); // Placeholder
-            
+
             return ResponseEntity.ok(employees);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la recherche d'employés: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -326,27 +310,25 @@ public class EmployeeController {
      * Récupère les statistiques des employés
      */
     @GetMapping("/statistics")
-    @Operation(summary = "Statistiques des employés", 
-               description = "Récupère les statistiques générales des employés")
+    @Operation(summary = "Statistiques des employés", description = "Récupère les statistiques générales des employés")
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<Map<String, Object>> getEmployeeStatistics() {
-        
+
         log.info("Récupération des statistiques des employés");
-        
+
         try {
             long totalEmployees = employeeRepository.count();
             long activeEmployees = employeeRepository.countByEmploymentInfoIsActive(true);
             long inactiveEmployees = totalEmployees - activeEmployees;
-            
+
             Map<String, Object> statistics = Map.of(
-                "totalEmployees", totalEmployees,
-                "activeEmployees", activeEmployees,
-                "inactiveEmployees", inactiveEmployees,
-                "departmentCounts", employeeRepository.countByDepartment()
-            );
-            
+                    "totalEmployees", totalEmployees,
+                    "activeEmployees", activeEmployees,
+                    "inactiveEmployees", inactiveEmployees,
+                    "departmentCounts", employeeRepository.countByDepartment());
+
             return ResponseEntity.ok(statistics);
-            
+
         } catch (Exception e) {
             log.error("Erreur lors de la récupération des statistiques: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();

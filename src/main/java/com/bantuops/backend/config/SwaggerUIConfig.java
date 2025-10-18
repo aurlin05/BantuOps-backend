@@ -1,6 +1,5 @@
 package com.bantuops.backend.config;
 
-import org.springdoc.core.properties.SwaggerUiConfigParameters;
 import org.springdoc.core.properties.SwaggerUiConfigProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,7 +25,7 @@ public class SwaggerUIConfig implements WebMvcConfigurer {
         properties.setDefaultModelsExpandDepth(2); // Expand models to depth 2
         properties.setDefaultModelExpandDepth(2);
         properties.setDisplayRequestDuration(true); // Show request duration
-        properties.setFilter(true); // Enable filtering
+        properties.setFilter("true"); // Enable filtering
         properties.setShowExtensions(true); // Show vendor extensions
         properties.setShowCommonExtensions(true);
         properties.setTryItOutEnabled(true); // Enable "Try it out" by default
@@ -41,7 +40,6 @@ public class SwaggerUIConfig implements WebMvcConfigurer {
         // Configuration de l'affichage
         properties.setDeepLinking(true); // Enable deep linking
         properties.setDisplayOperationId(false); // Hide operation IDs
-        properties.setShowMutatedRequest(true); // Show mutated request
         
         // Personnalisation de l'interface
         properties.setSyntaxHighlight(new SwaggerUiConfigProperties.SyntaxHighlight());
@@ -55,18 +53,7 @@ public class SwaggerUIConfig implements WebMvcConfigurer {
         return properties;
     }
 
-    /**
-     * Configure les paramètres de Swagger UI
-     */
-    @Bean
-    public SwaggerUiConfigParameters swaggerUiConfigParameters() {
-        SwaggerUiConfigParameters parameters = new SwaggerUiConfigParameters();
-        
-        // Titre personnalisé
-        parameters.setConfigUrl("/v3/api-docs/swagger-config");
-        
-        return parameters;
-    }
+
 
     /**
      * Configure les ressources statiques pour inclure les fichiers CSS personnalisés

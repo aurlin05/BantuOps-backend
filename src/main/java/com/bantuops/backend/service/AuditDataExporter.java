@@ -143,7 +143,7 @@ public class AuditDataExporter {
         try {
             // Filtrer les logs contenant des données sensibles
             List<AuditLog> sensitiveLogs = auditLogs.stream()
-                    .filter(AuditLog::isSensitiveData)
+                    .filter(log -> log.getSensitiveData() != null && log.getSensitiveData())
                     .toList();
 
             if (sensitiveLogs.isEmpty()) {
@@ -246,5 +246,96 @@ public class AuditDataExporter {
     private String getCurrentUserId() {
         // TODO: Récupérer depuis le contexte de sécurité Spring
         return "SYSTEM";
+    }
+
+    /**
+     * Exporte les données d'audit avec chiffrement et métadonnées complètes
+     */
+    @PreAuthorize("hasAnyRole('ADMIN', 'AUDITOR')")
+    public ExportResult exportAuditDataWithEncryption(com.bantuops.backend.dto.AuditReportRequest request) {
+        log.info("Export des données d'audit avec chiffrement - Type: {}", request.getReportType());
+
+        try {
+            // Générer un ID d'export unique
+            String exportId = java.util.UUID.randomUUID().toString();
+            
+            // Créer les données d'export (simulé pour l'instant)
+            String data = createExportData(request);
+            
+            // Chiffrer si demandé
+            boolean encrypted = request.isEncryptSensitiveData();
+            if (encrypted) {
+                data = dataEncryptionService.encrypt(data);
+            }
+            
+            // Encoder en Base64
+            String base64Data = java.util.Base64.getEncoder().encodeToString(data.getBytes());
+            
+            // Calculer les checksums
+            String checksumMD5 = calculateMD5(data);
+            String checksumSHA256 = calculateSHA256(data);
+            
+            return ExportResult.builder()
+                    .exportId(exportId)
+                    .data(base64Data)
+                    .encrypted(encrypted)
+                    .checksumMD5(checksumMD5)
+                    .checksumSHA256(checksumSHA256)
+                    .exportTimestamp(LocalDateTime.now())
+                    .format(request.getOutputFormat().toString())
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("Erreur lors de l'export avec chiffrement: {}", e.getMessage(), e);
+            throw new RuntimeException("Échec de l'export des données", e);
+        }
+    }
+
+    private String createExportData(com.bantuops.backend.dto.AuditReportRequest request) {
+        // Simuler la création de données d'export
+        return "Export data for " + request.getReportType();
+    }
+
+    private String calculateMD5(String data) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] hash = md.digest(data.getBytes());
+            return bytesToHex(hash);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private String calculateSHA256(String data) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(data.getBytes());
+            return bytesToHex(hash);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private String bytesToHex(byte[] bytes) {
+        StringBuilder result = new StringBuilder();
+        for (byte b : bytes) {
+            result.append(String.format("%02x", b));
+        }
+        return result.toString();
+    }
+
+    /**
+     * Classe de résultat d'export avec métadonnées
+     */
+    @lombok.Builder
+    @lombok.Data
+    public static class ExportResult {
+        private String exportId;
+        private String data;
+        private boolean encrypted;
+        private String checksumMD5;
+        private String checksumSHA256;
+        private LocalDateTime exportTimestamp;
+        private String format;
     }
 }

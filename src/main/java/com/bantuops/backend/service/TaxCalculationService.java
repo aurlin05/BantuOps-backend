@@ -1,6 +1,8 @@
 package com.bantuops.backend.service;
 
 import com.bantuops.backend.dto.TaxCalculationResult;
+import com.bantuops.backend.dto.TaxExemption;
+import com.bantuops.backend.dto.TaxRates;
 import com.bantuops.backend.entity.Employee;
 import com.bantuops.backend.exception.PayrollCalculationException;
 import lombok.RequiredArgsConstructor;

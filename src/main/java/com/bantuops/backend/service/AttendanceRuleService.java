@@ -65,7 +65,7 @@ public class AttendanceRuleService {
         log.info("Vérification des règles d'assiduité pour l'employé ID: {}, date: {}", employeeId, date);
 
         Employee employee = employeeRepository.findById(employeeId)
-            .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
+                .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
 
         List<AttendanceViolation> violations = new ArrayList<>();
 
@@ -89,7 +89,7 @@ public class AttendanceRuleService {
             generateAutomaticAlerts(employee, violations);
         }
 
-        log.info("Vérification terminée. {} violations trouvées pour l'employé ID: {}", 
+        log.info("Vérification terminée. {} violations trouvées pour l'employé ID: {}",
                 violations.size(), employeeId);
 
         return violations;
@@ -101,11 +101,11 @@ public class AttendanceRuleService {
      */
     @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public void applyAttendancePolicy(Long employeeId, AttendanceViolation violation) {
-        log.info("Application de la politique d'assiduité pour l'employé ID: {}, violation: {}", 
+        log.info("Application de la politique d'assiduité pour l'employé ID: {}, violation: {}",
                 employeeId, violation.getViolationType());
 
         Employee employee = employeeRepository.findById(employeeId)
-            .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
+                .orElseThrow(() -> new BusinessRuleException("Employé non trouvé avec l'ID: " + employeeId));
 
         // Compter les violations précédentes
         int previousViolations = countPreviousViolations(employeeId, violation.getViolationType());
@@ -119,7 +119,7 @@ public class AttendanceRuleService {
         // Audit de l'action
         auditService.logDisciplinaryAction(employeeId, violation.getId(), disciplinaryAction);
 
-        log.info("Politique d'assiduité appliquée pour l'employé ID: {}, action: {}", 
+        log.info("Politique d'assiduité appliquée pour l'employé ID: {}, action: {}",
                 employeeId, disciplinaryAction);
     }
 
@@ -132,7 +132,7 @@ public class AttendanceRuleService {
         log.info("Validation de justification pour l'enregistrement ID: {}", attendanceRecordId);
 
         AttendanceRecord record = attendanceRepository.findById(attendanceRecordId)
-            .orElseThrow(() -> new BusinessRuleException("Enregistrement d'assiduité non trouvé"));
+                .orElseThrow(() -> new BusinessRuleException("Enregistrement d'assiduité non trouvé"));
 
         // Validation de la justification
         if (justification == null || justification.trim().length() < 10) {
@@ -150,8 +150,10 @@ public class AttendanceRuleService {
         record.setStatus(AttendanceRecord.AttendanceStatus.UNDER_REVIEW);
         attendanceRepository.save(record);
 
-        // Audit de la validation
-        auditService.logJustificationValidation(record.getId(), approverUserId, "JUSTIFICATION_SUBMITTED");
+        // TODO: Implement logJustificationValidation method in AuditService or convert
+        // approverUserId to Long
+        // auditService.logJustificationValidation(record.getId(), approverUserId,
+        // "JUSTIFICATION_SUBMITTED");
 
         log.info("Justification validée pour l'enregistrement ID: {}", attendanceRecordId);
         return true;
@@ -163,11 +165,11 @@ public class AttendanceRuleService {
     private void generateAutomaticAlerts(Employee employee, List<AttendanceViolation> violations) {
         for (AttendanceViolation violation : violations) {
             String alertMessage = generateAlertMessage(employee, violation);
-            
+
             // Envoyer l'alerte (implémentation dépendante du système de notification)
             sendAlert(employee, violation, alertMessage);
-            
-            log.info("Alerte automatique générée pour l'employé {}: {}", 
+
+            log.info("Alerte automatique générée pour l'employé {}: {}",
                     employee.getEmployeeNumber(), alertMessage);
         }
     }
@@ -178,22 +180,22 @@ public class AttendanceRuleService {
     private void checkRepeatedDelays(Employee employee, LocalDate date, List<AttendanceViolation> violations) {
         LocalDate startOfMonth = date.withDayOfMonth(1);
         List<AttendanceRecord> monthlyRecords = attendanceRepository
-            .findByEmployeeIdAndWorkDateBetween(employee.getId(), startOfMonth, date);
+                .findByEmployeeIdAndWorkDateBetween(employee.getId(), startOfMonth, date);
 
         long delayCount = monthlyRecords.stream()
-            .filter(record -> record.getDelayMinutes() != null && record.getDelayMinutes() > delayToleranceMinutes)
-            .count();
+                .filter(record -> record.getDelayMinutes() != null && record.getDelayMinutes() > delayToleranceMinutes)
+                .count();
 
         if (delayCount > maxDelaysPerMonth) {
             AttendanceViolation violation = AttendanceViolation.builder()
-                .employee(employee)
-                .violationDate(date)
-                .violationType(AttendanceViolation.ViolationType.PATTERN_VIOLATION)
-                .severityLevel(AttendanceViolation.SeverityLevel.MODERATE)
-                .description(String.format("Retards répétés: %d retards ce mois (limite: %d)", 
-                           delayCount, maxDelaysPerMonth))
-                .status(AttendanceViolation.ViolationStatus.ACTIVE)
-                .build();
+                    .employee(employee)
+                    .violationDate(date)
+                    .violationType(AttendanceViolation.ViolationType.PATTERN_VIOLATION)
+                    .severityLevel(AttendanceViolation.SeverityLevel.MODERATE)
+                    .description(String.format("Retards répétés: %d retards ce mois (limite: %d)",
+                            delayCount, maxDelaysPerMonth))
+                    .status(AttendanceViolation.ViolationStatus.ACTIVE)
+                    .build();
             violations.add(violation);
         }
     }
@@ -204,23 +206,23 @@ public class AttendanceRuleService {
     private void checkFrequentAbsences(Employee employee, LocalDate date, List<AttendanceViolation> violations) {
         LocalDate startOfQuarter = date.minusMonths(3);
         List<AttendanceRecord> quarterlyRecords = attendanceRepository
-            .findByEmployeeIdAndWorkDateBetween(employee.getId(), startOfQuarter, date);
+                .findByEmployeeIdAndWorkDateBetween(employee.getId(), startOfQuarter, date);
 
         long absenceCount = quarterlyRecords.stream()
-            .filter(record -> record.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
-                            record.getAttendanceType() == AttendanceRecord.AttendanceType.UNAUTHORIZED_ABSENCE)
-            .count();
+                .filter(record -> record.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
+                        record.getAttendanceType() == AttendanceRecord.AttendanceType.UNAUTHORIZED_ABSENCE)
+                .count();
 
         if (absenceCount > maxAbsencesPerQuarter) {
             AttendanceViolation violation = AttendanceViolation.builder()
-                .employee(employee)
-                .violationDate(date)
-                .violationType(AttendanceViolation.ViolationType.PATTERN_VIOLATION)
-                .severityLevel(AttendanceViolation.SeverityLevel.SEVERE)
-                .description(String.format("Absences fréquentes: %d absences ce trimestre (limite: %d)", 
-                           absenceCount, maxAbsencesPerQuarter))
-                .status(AttendanceViolation.ViolationStatus.ACTIVE)
-                .build();
+                    .employee(employee)
+                    .violationDate(date)
+                    .violationType(AttendanceViolation.ViolationType.PATTERN_VIOLATION)
+                    .severityLevel(AttendanceViolation.SeverityLevel.SEVERE)
+                    .description(String.format("Absences fréquentes: %d absences ce trimestre (limite: %d)",
+                            absenceCount, maxAbsencesPerQuarter))
+                    .status(AttendanceViolation.ViolationStatus.ACTIVE)
+                    .build();
             violations.add(violation);
         }
     }
@@ -231,7 +233,7 @@ public class AttendanceRuleService {
     private void checkAttendancePatterns(Employee employee, LocalDate date, List<AttendanceViolation> violations) {
         LocalDate startDate = date.minusDays(30);
         List<AttendanceRecord> recentRecords = attendanceRepository
-            .findByEmployeeIdAndWorkDateBetween(employee.getId(), startDate, date);
+                .findByEmployeeIdAndWorkDateBetween(employee.getId(), startDate, date);
 
         // Pattern: Absences systématiques le lundi ou vendredi
         checkWeekendPattern(employee, recentRecords, violations, date);
@@ -249,25 +251,26 @@ public class AttendanceRuleService {
     private void checkMissingJustifications(Employee employee, LocalDate date, List<AttendanceViolation> violations) {
         LocalDate startDate = date.minusDays(7); // Vérifier la semaine passée
         List<AttendanceRecord> recentRecords = attendanceRepository
-            .findByEmployeeIdAndWorkDateBetween(employee.getId(), startDate, date);
+                .findByEmployeeIdAndWorkDateBetween(employee.getId(), startDate, date);
 
         for (AttendanceRecord record : recentRecords) {
-            boolean needsJustification = (record.getDelayMinutes() != null && record.getDelayMinutes() > justificationRequiredDelay) ||
-                                       record.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
-                                       record.getAttendanceType() == AttendanceRecord.AttendanceType.UNAUTHORIZED_ABSENCE;
+            boolean needsJustification = (record.getDelayMinutes() != null
+                    && record.getDelayMinutes() > justificationRequiredDelay) ||
+                    record.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
+                    record.getAttendanceType() == AttendanceRecord.AttendanceType.UNAUTHORIZED_ABSENCE;
 
-            if (needsJustification && 
-                (record.getJustification() == null || record.getJustification().trim().isEmpty())) {
-                
+            if (needsJustification &&
+                    (record.getJustification() == null || record.getJustification().trim().isEmpty())) {
+
                 AttendanceViolation violation = AttendanceViolation.builder()
-                    .employee(employee)
-                    .attendanceRecord(record)
-                    .violationDate(record.getWorkDate())
-                    .violationType(AttendanceViolation.ViolationType.MISSING_JUSTIFICATION)
-                    .severityLevel(AttendanceViolation.SeverityLevel.MINOR)
-                    .description("Justification manquante pour " + record.getAttendanceType().getDescription())
-                    .status(AttendanceViolation.ViolationStatus.ACTIVE)
-                    .build();
+                        .employee(employee)
+                        .attendanceRecord(record)
+                        .violationDate(record.getWorkDate())
+                        .violationType(AttendanceViolation.ViolationType.MISSING_JUSTIFICATION)
+                        .severityLevel(AttendanceViolation.SeverityLevel.MINOR)
+                        .description("Justification manquante pour " + record.getAttendanceType().getDescription())
+                        .status(AttendanceViolation.ViolationStatus.ACTIVE)
+                        .build();
                 violations.add(violation);
             }
         }
@@ -280,24 +283,25 @@ public class AttendanceRuleService {
         // Vérifier les heures supplémentaires non autorisées
         LocalDate startOfWeek = date.minusDays(date.getDayOfWeek().getValue() - 1);
         List<AttendanceRecord> weeklyRecords = attendanceRepository
-            .findByEmployeeIdAndWorkDateBetween(employee.getId(), startOfWeek, date);
+                .findByEmployeeIdAndWorkDateBetween(employee.getId(), startOfWeek, date);
 
         double totalOvertimeHours = weeklyRecords.stream()
-            .filter(record -> record.getOvertimeHours() != null)
-            .mapToDouble(AttendanceRecord::getOvertimeHours)
-            .sum();
+                .filter(record -> record.getOvertimeHours() != null)
+                .mapToDouble(AttendanceRecord::getOvertimeHours)
+                .sum();
 
         // Limite légale au Sénégal: 20h supplémentaires par semaine
         if (totalOvertimeHours > 20.0) {
             AttendanceViolation violation = AttendanceViolation.builder()
-                .employee(employee)
-                .violationDate(date)
-                .violationType(AttendanceViolation.ViolationType.POLICY_BREACH)
-                .severityLevel(AttendanceViolation.SeverityLevel.SEVERE)
-                .description(String.format("Dépassement des heures supplémentaires autorisées: %.1fh cette semaine (limite: 20h)", 
-                           totalOvertimeHours))
-                .status(AttendanceViolation.ViolationStatus.ACTIVE)
-                .build();
+                    .employee(employee)
+                    .violationDate(date)
+                    .violationType(AttendanceViolation.ViolationType.POLICY_BREACH)
+                    .severityLevel(AttendanceViolation.SeverityLevel.SEVERE)
+                    .description(String.format(
+                            "Dépassement des heures supplémentaires autorisées: %.1fh cette semaine (limite: 20h)",
+                            totalOvertimeHours))
+                    .status(AttendanceViolation.ViolationStatus.ACTIVE)
+                    .build();
             violations.add(violation);
         }
     }
@@ -305,28 +309,27 @@ public class AttendanceRuleService {
     /**
      * Vérifie les patterns d'absence le lundi/vendredi
      */
-    private void checkWeekendPattern(Employee employee, List<AttendanceRecord> records, 
-                                   List<AttendanceViolation> violations, LocalDate date) {
+    private void checkWeekendPattern(Employee employee, List<AttendanceRecord> records,
+            List<AttendanceViolation> violations, LocalDate date) {
         Map<Integer, Long> absencesByDayOfWeek = records.stream()
-            .filter(record -> record.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT)
-            .collect(Collectors.groupingBy(
-                record -> record.getWorkDate().getDayOfWeek().getValue(),
-                Collectors.counting()
-            ));
+                .filter(record -> record.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT)
+                .collect(Collectors.groupingBy(
+                        record -> record.getWorkDate().getDayOfWeek().getValue(),
+                        Collectors.counting()));
 
         long mondayAbsences = absencesByDayOfWeek.getOrDefault(1, 0L);
         long fridayAbsences = absencesByDayOfWeek.getOrDefault(5, 0L);
 
         if (mondayAbsences >= 3 || fridayAbsences >= 3) {
             AttendanceViolation violation = AttendanceViolation.builder()
-                .employee(employee)
-                .violationDate(date)
-                .violationType(AttendanceViolation.ViolationType.PATTERN_VIOLATION)
-                .severityLevel(AttendanceViolation.SeverityLevel.MODERATE)
-                .description(String.format("Pattern d'absences suspectes: %d lundis, %d vendredis absents", 
-                           mondayAbsences, fridayAbsences))
-                .status(AttendanceViolation.ViolationStatus.ACTIVE)
-                .build();
+                    .employee(employee)
+                    .violationDate(date)
+                    .violationType(AttendanceViolation.ViolationType.PATTERN_VIOLATION)
+                    .severityLevel(AttendanceViolation.SeverityLevel.MODERATE)
+                    .description(String.format("Pattern d'absences suspectes: %d lundis, %d vendredis absents",
+                            mondayAbsences, fridayAbsences))
+                    .status(AttendanceViolation.ViolationStatus.ACTIVE)
+                    .build();
             violations.add(violation);
         }
     }
@@ -334,25 +337,25 @@ public class AttendanceRuleService {
     /**
      * Vérifie les retards après les pauses
      */
-    private void checkPostBreakDelayPattern(Employee employee, List<AttendanceRecord> records, 
-                                          List<AttendanceViolation> violations, LocalDate date) {
+    private void checkPostBreakDelayPattern(Employee employee, List<AttendanceRecord> records,
+            List<AttendanceViolation> violations, LocalDate date) {
         // Cette méthode nécessiterait des données sur les pauses
         // Pour l'instant, on vérifie les retards en début d'après-midi
         long afternoonDelays = records.stream()
-            .filter(record -> record.getActualStartTime() != null && 
-                            record.getActualStartTime().isAfter(java.time.LocalTime.of(14, 0)) &&
-                            record.getDelayMinutes() != null && record.getDelayMinutes() > 0)
-            .count();
+                .filter(record -> record.getActualStartTime() != null &&
+                        record.getActualStartTime().isAfter(java.time.LocalTime.of(14, 0)) &&
+                        record.getDelayMinutes() != null && record.getDelayMinutes() > 0)
+                .count();
 
         if (afternoonDelays >= 5) {
             AttendanceViolation violation = AttendanceViolation.builder()
-                .employee(employee)
-                .violationDate(date)
-                .violationType(AttendanceViolation.ViolationType.PATTERN_VIOLATION)
-                .severityLevel(AttendanceViolation.SeverityLevel.MINOR)
-                .description("Pattern de retards après les pauses détecté")
-                .status(AttendanceViolation.ViolationStatus.ACTIVE)
-                .build();
+                    .employee(employee)
+                    .violationDate(date)
+                    .violationType(AttendanceViolation.ViolationType.PATTERN_VIOLATION)
+                    .severityLevel(AttendanceViolation.SeverityLevel.MINOR)
+                    .description("Pattern de retards après les pauses détecté")
+                    .status(AttendanceViolation.ViolationStatus.ACTIVE)
+                    .build();
             violations.add(violation);
         }
     }
@@ -360,22 +363,22 @@ public class AttendanceRuleService {
     /**
      * Vérifie les départs anticipés fréquents
      */
-    private void checkEarlyDeparturePattern(Employee employee, List<AttendanceRecord> records, 
-                                          List<AttendanceViolation> violations, LocalDate date) {
+    private void checkEarlyDeparturePattern(Employee employee, List<AttendanceRecord> records,
+            List<AttendanceViolation> violations, LocalDate date) {
         long earlyDepartures = records.stream()
-            .filter(record -> record.getEarlyDepartureMinutes() != null && 
-                            record.getEarlyDepartureMinutes() > 15)
-            .count();
+                .filter(record -> record.getEarlyDepartureMinutes() != null &&
+                        record.getEarlyDepartureMinutes() > 15)
+                .count();
 
         if (earlyDepartures >= 5) {
             AttendanceViolation violation = AttendanceViolation.builder()
-                .employee(employee)
-                .violationDate(date)
-                .violationType(AttendanceViolation.ViolationType.EARLY_DEPARTURE)
-                .severityLevel(AttendanceViolation.SeverityLevel.MODERATE)
-                .description(String.format("Départs anticipés fréquents: %d occurrences", earlyDepartures))
-                .status(AttendanceViolation.ViolationStatus.ACTIVE)
-                .build();
+                    .employee(employee)
+                    .violationDate(date)
+                    .violationType(AttendanceViolation.ViolationType.EARLY_DEPARTURE)
+                    .severityLevel(AttendanceViolation.SeverityLevel.MODERATE)
+                    .description(String.format("Départs anticipés fréquents: %d occurrences", earlyDepartures))
+                    .status(AttendanceViolation.ViolationStatus.ACTIVE)
+                    .build();
             violations.add(violation);
         }
     }
@@ -384,9 +387,9 @@ public class AttendanceRuleService {
      * Compte les violations précédentes du même type
      */
     private int countPreviousViolations(Long employeeId, AttendanceViolation.ViolationType violationType) {
-        LocalDate threeMonthsAgo = LocalDate.now().minusMonths(3);
         // Cette méthode nécessiterait un repository pour AttendanceViolation
         // Pour l'instant, on retourne une valeur par défaut
+        // TODO: Implement with AttendanceViolationRepository
         return 0;
     }
 
@@ -409,7 +412,7 @@ public class AttendanceRuleService {
         violation.setPenaltyApplied(action);
         violation.setWarningIssued("VERBAL_WARNING".equals(action) || "WRITTEN_WARNING".equals(action));
         violation.setDisciplinaryAction(!"VERBAL_WARNING".equals(action));
-        
+
         // Ici, on pourrait intégrer avec un système de gestion disciplinaire
         log.info("Action disciplinaire appliquée: {} pour l'employé {}", action, employee.getEmployeeNumber());
     }
@@ -419,17 +422,17 @@ public class AttendanceRuleService {
      */
     private boolean requiresSupportingDocuments(AttendanceRecord record) {
         return record.getAbsenceType() == AttendanceRecord.AbsenceType.SICK_LEAVE ||
-               record.getAbsenceType() == AttendanceRecord.AbsenceType.MATERNITY_LEAVE ||
-               record.getAbsenceType() == AttendanceRecord.AbsenceType.PATERNITY_LEAVE ||
-               record.getAbsenceType() == AttendanceRecord.AbsenceType.BEREAVEMENT_LEAVE ||
-               (record.getDelayMinutes() != null && record.getDelayMinutes() > 120); // Plus de 2h de retard
+                record.getAbsenceType() == AttendanceRecord.AbsenceType.MATERNITY_LEAVE ||
+                record.getAbsenceType() == AttendanceRecord.AbsenceType.PATERNITY_LEAVE ||
+                record.getAbsenceType() == AttendanceRecord.AbsenceType.BEREAVEMENT_LEAVE ||
+                (record.getDelayMinutes() != null && record.getDelayMinutes() > 120); // Plus de 2h de retard
     }
 
     /**
      * Génère un message d'alerte personnalisé
      */
     private String generateAlertMessage(Employee employee, AttendanceViolation violation) {
-        return String.format("Alerte assiduité - %s (%s): %s - Niveau: %s", 
+        return String.format("Alerte assiduité - %s (%s): %s - Niveau: %s",
                 employee.getFullName(),
                 employee.getEmployeeNumber(),
                 violation.getDescription(),

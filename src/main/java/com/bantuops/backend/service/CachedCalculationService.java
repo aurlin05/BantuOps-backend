@@ -31,8 +31,7 @@ public class CachedCalculationService {
     private final PayrollCalculationService payrollCalculationService;
     private final TaxCalculationService taxCalculationService;
     private final VATCalculationService vatCalculationService;
-    private final EmployeeService employeeService;
-    private final AttendanceService attendanceService;
+
 
     /**
      * Cache les calculs de taxes avec clé composite

@@ -22,7 +22,8 @@ import java.util.stream.Collectors;
 
 /**
  * Service de génération de rapports RH avec métriques d'assiduité
- * Conforme aux exigences 3.6, 3.8, 2.4, 2.5 pour les rapports et tableaux de bord
+ * Conforme aux exigences 3.6, 3.8, 2.4, 2.5 pour les rapports et tableaux de
+ * bord
  */
 @Service
 @Transactional(readOnly = true)
@@ -49,21 +50,21 @@ public class HRReportService {
         // Récupération des données de base
         List<Employee> activeEmployees = employeeRepository.findByIsActiveTrue();
         List<AttendanceRecord> attendanceRecords = attendanceRepository
-            .findByWorkDateBetween(startDate, endDate);
+                .findByWorkDateBetween(startDate, endDate);
 
         // Construction du rapport
         AttendanceReport report = AttendanceReport.builder()
-            .reportId(generateReportId(period, reportType))
-            .reportType(reportType)
-            .reportPeriod(period)
-            .generatedDate(LocalDate.now())
-            .globalStatistics(calculateGlobalStatistics(activeEmployees, attendanceRecords, period))
-            .employeeStatistics(calculateEmployeeStatistics(activeEmployees, attendanceRecords, period))
-            .departmentStatistics(calculateDepartmentStatistics(activeEmployees, attendanceRecords, period))
-            .violations(calculateViolationSummary(attendanceRecords))
-            .trends(calculateAttendanceTrends(period))
-            .recommendations(generateRecommendations(activeEmployees, attendanceRecords))
-            .build();
+                .reportId(generateReportId(period, reportType))
+                .reportType(reportType)
+                .reportPeriod(period)
+                .generatedDate(LocalDate.now())
+                .globalStatistics(calculateGlobalStatistics(activeEmployees, attendanceRecords, period))
+                .employeeStatistics(calculateEmployeeStatistics(activeEmployees, attendanceRecords, period))
+                .departmentStatistics(calculateDepartmentStatistics(activeEmployees, attendanceRecords, period))
+                .violations(calculateViolationSummary(attendanceRecords))
+                .trends(calculateAttendanceTrends(period))
+                .recommendations(generateRecommendations(activeEmployees, attendanceRecords))
+                .build();
 
         // Audit de la génération du rapport
         auditService.logReportGeneration(report.getReportId(), reportType, period.toString());
@@ -95,15 +96,14 @@ public class HRReportService {
 
         // Statistiques agrégées
         exportData.put("statistics", calculateGlobalStatistics(
-            employeeRepository.findByIsActiveTrue(), records, period));
+                employeeRepository.findByIsActiveTrue(), records, period));
 
         // Métadonnées de l'export
         exportData.put("export_metadata", Map.of(
-            "period", period.toString(),
-            "export_date", LocalDate.now().toString(),
-            "anonymized", anonymize,
-            "record_count", records.size()
-        ));
+                "period", period.toString(),
+                "export_date", LocalDate.now().toString(),
+                "anonymized", anonymize,
+                "record_count", records.size()));
 
         // Audit de l'export
         auditService.logDataExport("HR_DATA", period.toString(), anonymize);
@@ -151,191 +151,195 @@ public class HRReportService {
 
     private AttendanceReport.AttendanceStatistics calculateGlobalStatistics(
             List<Employee> employees, List<AttendanceRecord> records, YearMonth period) {
-        
+
         int workingDays = calculateWorkingDaysInMonth(period);
         int totalEmployees = employees.size();
 
         long totalPresentDays = records.stream()
-            .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
+                .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
                         r.getAttendanceType() == AttendanceRecord.AttendanceType.LATE)
-            .count();
+                .count();
 
         long totalLateDays = records.stream()
-            .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
-            .count();
+                .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
+                .count();
 
         long totalAbsentDays = records.stream()
-            .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
+                .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
                         r.getAttendanceType() == AttendanceRecord.AttendanceType.UNAUTHORIZED_ABSENCE)
-            .count();
+                .count();
 
         long totalHalfDays = records.stream()
-            .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.HALF_DAY)
-            .count();
+                .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.HALF_DAY)
+                .count();
 
         double averageDelayMinutes = records.stream()
-            .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
-            .mapToInt(AttendanceRecord::getDelayMinutes)
-            .average()
-            .orElse(0.0);
+                .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
+                .mapToInt(AttendanceRecord::getDelayMinutes)
+                .average()
+                .orElse(0.0);
 
         BigDecimal totalOvertimeHours = records.stream()
-            .filter(r -> r.getOvertimeHours() != null)
-            .map(r -> BigDecimal.valueOf(r.getOvertimeHours()))
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                .filter(r -> r.getOvertimeHours() != null)
+                .map(r -> BigDecimal.valueOf(r.getOvertimeHours()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        double attendanceRate = totalEmployees > 0 && workingDays > 0 ?
-            (double) totalPresentDays / (totalEmployees * workingDays) * 100 : 0.0;
+        double attendanceRate = totalEmployees > 0 && workingDays > 0
+                ? (double) totalPresentDays / (totalEmployees * workingDays) * 100
+                : 0.0;
 
-        double punctualityRate = totalPresentDays > 0 ?
-            (double) (totalPresentDays - totalLateDays) / totalPresentDays * 100 : 0.0;
+        double punctualityRate = totalPresentDays > 0
+                ? (double) (totalPresentDays - totalLateDays) / totalPresentDays * 100
+                : 0.0;
 
         return AttendanceReport.AttendanceStatistics.builder()
-            .totalWorkingDays(workingDays)
-            .totalEmployees(totalEmployees)
-            .totalPresentDays(totalPresentDays)
-            .totalLateDays(totalLateDays)
-            .totalAbsentDays(totalAbsentDays)
-            .totalHalfDays(totalHalfDays)
-            .averageDelayMinutes(averageDelayMinutes)
-            .attendanceRate(attendanceRate)
-            .punctualityRate(punctualityRate)
-            .totalOvertimeHours(totalOvertimeHours)
-            .build();
+                .totalWorkingDays(workingDays)
+                .totalEmployees(totalEmployees)
+                .totalPresentDays(totalPresentDays)
+                .totalLateDays(totalLateDays)
+                .totalAbsentDays(totalAbsentDays)
+                .totalHalfDays(totalHalfDays)
+                .averageDelayMinutes(averageDelayMinutes)
+                .attendanceRate(attendanceRate)
+                .punctualityRate(punctualityRate)
+                .totalOvertimeHours(totalOvertimeHours)
+                .build();
     }
 
     private List<AttendanceReport.EmployeeAttendanceStatistics> calculateEmployeeStatistics(
             List<Employee> employees, List<AttendanceRecord> records, YearMonth period) {
-        
+
         int workingDays = calculateWorkingDaysInMonth(period);
         Map<Long, List<AttendanceRecord>> recordsByEmployee = records.stream()
-            .collect(Collectors.groupingBy(r -> r.getEmployee().getId()));
+                .collect(Collectors.groupingBy(r -> r.getEmployee().getId()));
 
         return employees.stream()
-            .map(employee -> {
-                List<AttendanceRecord> employeeRecords = recordsByEmployee.getOrDefault(employee.getId(), List.of());
-                
-                int presentDays = (int) employeeRecords.stream()
-                    .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
-                                r.getAttendanceType() == AttendanceRecord.AttendanceType.LATE)
-                    .count();
+                .map(employee -> {
+                    List<AttendanceRecord> employeeRecords = recordsByEmployee.getOrDefault(employee.getId(),
+                            List.of());
 
-                int lateDays = (int) employeeRecords.stream()
-                    .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
-                    .count();
+                    int presentDays = (int) employeeRecords.stream()
+                            .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
+                                    r.getAttendanceType() == AttendanceRecord.AttendanceType.LATE)
+                            .count();
 
-                int absentDays = (int) employeeRecords.stream()
-                    .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
-                                r.getAttendanceType() == AttendanceRecord.AttendanceType.UNAUTHORIZED_ABSENCE)
-                    .count();
+                    int lateDays = (int) employeeRecords.stream()
+                            .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
+                            .count();
 
-                int totalDelayMinutes = employeeRecords.stream()
-                    .filter(r -> r.getDelayMinutes() != null)
-                    .mapToInt(AttendanceRecord::getDelayMinutes)
-                    .sum();
+                    int absentDays = (int) employeeRecords.stream()
+                            .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
+                                    r.getAttendanceType() == AttendanceRecord.AttendanceType.UNAUTHORIZED_ABSENCE)
+                            .count();
 
-                double overtimeHours = employeeRecords.stream()
-                    .filter(r -> r.getOvertimeHours() != null)
-                    .mapToDouble(AttendanceRecord::getOvertimeHours)
-                    .sum();
+                    int totalDelayMinutes = employeeRecords.stream()
+                            .filter(r -> r.getDelayMinutes() != null)
+                            .mapToInt(AttendanceRecord::getDelayMinutes)
+                            .sum();
 
-                AttendanceReport.EmployeeAttendanceStatistics stats = AttendanceReport.EmployeeAttendanceStatistics.builder()
-                    .employeeId(employee.getId())
-                    .employeeNumber(employee.getEmployeeNumber())
-                    .employeeName(employee.getFullName())
-                    .department(employee.getDepartment())
-                    .workingDaysInPeriod(workingDays)
-                    .presentDays(presentDays)
-                    .lateDays(lateDays)
-                    .absentDays(absentDays)
-                    .totalDelayMinutes(totalDelayMinutes)
-                    .averageDelayMinutes(lateDays > 0 ? (double) totalDelayMinutes / lateDays : 0.0)
-                    .overtimeHours(overtimeHours)
-                    .build();
+                    double overtimeHours = employeeRecords.stream()
+                            .filter(r -> r.getOvertimeHours() != null)
+                            .mapToDouble(AttendanceRecord::getOvertimeHours)
+                            .sum();
 
-                stats.setAttendanceRate(stats.calculateAttendanceRate());
-                stats.setPunctualityRate(stats.calculatePunctualityRate());
-                stats.setPerformanceRating(stats.determinePerformanceRating());
+                    AttendanceReport.EmployeeAttendanceStatistics stats = AttendanceReport.EmployeeAttendanceStatistics
+                            .builder()
+                            .employeeId(employee.getId())
+                            .employeeNumber(employee.getEmployeeNumber())
+                            .employeeName(employee.getFullName())
+                            .department(employee.getDepartment())
+                            .workingDaysInPeriod(workingDays)
+                            .presentDays(presentDays)
+                            .lateDays(lateDays)
+                            .absentDays(absentDays)
+                            .totalDelayMinutes(totalDelayMinutes)
+                            .averageDelayMinutes(lateDays > 0 ? (double) totalDelayMinutes / lateDays : 0.0)
+                            .overtimeHours(overtimeHours)
+                            .build();
 
-                return stats;
-            })
-            .toList();
+                    stats.setAttendanceRate(stats.calculateAttendanceRate());
+                    stats.setPunctualityRate(stats.calculatePunctualityRate());
+                    stats.setPerformanceRating(stats.determinePerformanceRating());
+
+                    return stats;
+                })
+                .toList();
     }
 
     private List<AttendanceReport.DepartmentAttendanceStatistics> calculateDepartmentStatistics(
             List<Employee> employees, List<AttendanceRecord> records, YearMonth period) {
-        
+
         Map<String, List<Employee>> employeesByDepartment = employees.stream()
-            .collect(Collectors.groupingBy(Employee::getDepartment));
+                .collect(Collectors.groupingBy(Employee::getDepartment));
 
         Map<String, List<AttendanceRecord>> recordsByDepartment = records.stream()
-            .collect(Collectors.groupingBy(r -> r.getEmployee().getDepartment()));
+                .collect(Collectors.groupingBy(r -> r.getEmployee().getDepartment()));
 
         return employeesByDepartment.entrySet().stream()
-            .map(entry -> {
-                String department = entry.getKey();
-                List<Employee> deptEmployees = entry.getValue();
-                List<AttendanceRecord> deptRecords = recordsByDepartment.getOrDefault(department, List.of());
+                .map(entry -> {
+                    String department = entry.getKey();
+                    List<Employee> deptEmployees = entry.getValue();
+                    List<AttendanceRecord> deptRecords = recordsByDepartment.getOrDefault(department, List.of());
 
-                double avgAttendanceRate = calculateDepartmentAttendanceRate(deptEmployees, deptRecords, period);
-                double avgPunctualityRate = calculateDepartmentPunctualityRate(deptRecords);
-                double avgDelayMinutes = calculateDepartmentAverageDelay(deptRecords);
+                    double avgAttendanceRate = calculateDepartmentAttendanceRate(deptEmployees, deptRecords, period);
+                    double avgPunctualityRate = calculateDepartmentPunctualityRate(deptRecords);
+                    double avgDelayMinutes = calculateDepartmentAverageDelay(deptRecords);
 
-                return AttendanceReport.DepartmentAttendanceStatistics.builder()
-                    .departmentName(department)
-                    .employeeCount(deptEmployees.size())
-                    .averageAttendanceRate(avgAttendanceRate)
-                    .averagePunctualityRate(avgPunctualityRate)
-                    .averageDelayMinutes(avgDelayMinutes)
-                    .totalAbsences(deptRecords.stream()
-                        .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT)
-                        .count())
-                    .totalDelays(deptRecords.stream()
-                        .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
-                        .count())
-                    .totalOvertimeHours(deptRecords.stream()
-                        .filter(r -> r.getOvertimeHours() != null)
-                        .mapToDouble(AttendanceRecord::getOvertimeHours)
-                        .sum())
-                    .build();
-            })
-            .toList();
+                    return AttendanceReport.DepartmentAttendanceStatistics.builder()
+                            .departmentName(department)
+                            .employeeCount(deptEmployees.size())
+                            .averageAttendanceRate(avgAttendanceRate)
+                            .averagePunctualityRate(avgPunctualityRate)
+                            .averageDelayMinutes(avgDelayMinutes)
+                            .totalAbsences(deptRecords.stream()
+                                    .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT)
+                                    .count())
+                            .totalDelays(deptRecords.stream()
+                                    .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
+                                    .count())
+                            .totalOvertimeHours(deptRecords.stream()
+                                    .filter(r -> r.getOvertimeHours() != null)
+                                    .mapToDouble(AttendanceRecord::getOvertimeHours)
+                                    .sum())
+                            .build();
+                })
+                .toList();
     }
 
     private List<AttendanceReport.AttendanceViolationSummary> calculateViolationSummary(
             List<AttendanceRecord> records) {
-        
+
         Map<String, Long> violationCounts = new HashMap<>();
-        
+
         // Compter les différents types de violations
         records.stream()
-            .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 30)
-            .forEach(r -> violationCounts.merge("EXCESSIVE_DELAY", 1L, Long::sum));
+                .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 30)
+                .forEach(r -> violationCounts.merge("EXCESSIVE_DELAY", 1L, Long::sum));
 
         records.stream()
-            .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.UNAUTHORIZED_ABSENCE)
-            .forEach(r -> violationCounts.merge("UNAUTHORIZED_ABSENCE", 1L, Long::sum));
+                .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.UNAUTHORIZED_ABSENCE)
+                .forEach(r -> violationCounts.merge("UNAUTHORIZED_ABSENCE", 1L, Long::sum));
 
         records.stream()
-            .filter(r -> (r.getJustification() == null || r.getJustification().trim().isEmpty()) &&
+                .filter(r -> (r.getJustification() == null || r.getJustification().trim().isEmpty()) &&
                         (r.getAttendanceType() == AttendanceRecord.AttendanceType.ABSENT ||
-                         (r.getDelayMinutes() != null && r.getDelayMinutes() > 15)))
-            .forEach(r -> violationCounts.merge("MISSING_JUSTIFICATION", 1L, Long::sum));
+                                (r.getDelayMinutes() != null && r.getDelayMinutes() > 15)))
+                .forEach(r -> violationCounts.merge("MISSING_JUSTIFICATION", 1L, Long::sum));
 
         return violationCounts.entrySet().stream()
-            .map(entry -> AttendanceReport.AttendanceViolationSummary.builder()
-                .violationType(entry.getKey())
-                .count(entry.getValue().intValue())
-                .severity(determineSeverity(entry.getKey()))
-                .recommendedAction(getRecommendedAction(entry.getKey()))
-                .build())
-            .toList();
+                .map(entry -> AttendanceReport.AttendanceViolationSummary.builder()
+                        .violationType(entry.getKey())
+                        .count(entry.getValue().intValue())
+                        .severity(determineSeverity(entry.getKey()))
+                        .recommendedAction(getRecommendedAction(entry.getKey()))
+                        .build())
+                .toList();
     }
 
     private AttendanceReport.AttendanceTrends calculateAttendanceTrends(YearMonth period) {
         // Calculer les tendances sur les 6 derniers mois
         Map<String, Double> monthlyRates = new HashMap<>();
-        
+
         for (int i = 5; i >= 0; i--) {
             YearMonth month = period.minusMonths(i);
             double rate = calculateMonthlyAttendanceRate(month);
@@ -343,12 +347,12 @@ public class HRReportService {
         }
 
         String trendDirection = analyzeTrendDirection(monthlyRates);
-        
+
         return AttendanceReport.AttendanceTrends.builder()
-            .monthlyAttendanceRates(monthlyRates)
-            .trendDirection(trendDirection)
-            .trendAnalysis(generateTrendAnalysis(monthlyRates, trendDirection))
-            .build();
+                .monthlyAttendanceRates(monthlyRates)
+                .trendDirection(trendDirection)
+                .trendAnalysis(generateTrendAnalysis(monthlyRates, trendDirection))
+                .build();
     }
 
     private List<String> generateRecommendations(List<Employee> employees, List<AttendanceRecord> records) {
@@ -361,8 +365,8 @@ public class HRReportService {
         }
 
         long excessiveDelays = records.stream()
-            .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 60)
-            .count();
+                .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 60)
+                .count();
         if (excessiveDelays > records.size() * 0.1) {
             recommendations.add("Réviser les horaires de travail et les politiques de flexibilité");
         }
@@ -380,7 +384,7 @@ public class HRReportService {
         LocalDate start = period.atDay(1);
         LocalDate end = period.atEndOfMonth();
         int workingDays = 0;
-        
+
         LocalDate current = start;
         while (!current.isAfter(end)) {
             if (current.getDayOfWeek().getValue() != 7) { // Exclure les dimanches
@@ -388,92 +392,100 @@ public class HRReportService {
             }
             current = current.plusDays(1);
         }
-        
+
         return workingDays;
     }
 
     private double calculateGlobalAttendanceRate(List<Employee> employees, List<AttendanceRecord> records) {
-        if (employees.isEmpty()) return 0.0;
-        
+        if (employees.isEmpty())
+            return 0.0;
+
         long presentDays = records.stream()
-            .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
+                .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
                         r.getAttendanceType() == AttendanceRecord.AttendanceType.LATE)
-            .count();
-        
+                .count();
+
         return (double) presentDays / records.size() * 100;
     }
 
     private String generateReportId(YearMonth period, String reportType) {
-        return String.format("ATT_%s_%s_%d", 
-            reportType.toUpperCase(), 
-            period.format(DateTimeFormatter.ofPattern("yyyyMM")),
-            System.currentTimeMillis() % 10000);
+        return String.format("ATT_%s_%s_%d",
+                reportType.toUpperCase(),
+                period.format(DateTimeFormatter.ofPattern("yyyyMM")),
+                System.currentTimeMillis() % 10000);
     }
 
     private List<Object> anonymizeAttendanceData(List<AttendanceRecord> records) {
         return records.stream()
-            .map(record -> Map.of(
-                "employee_id", "EMP_" + record.getEmployee().getId().hashCode(),
-                "work_date", record.getWorkDate(),
-                "attendance_type", record.getAttendanceType(),
-                "delay_minutes", record.getDelayMinutes() != null ? record.getDelayMinutes() : 0,
-                "department", record.getEmployee().getDepartment()
-            ))
-            .collect(Collectors.toList());
+                .map(record -> Map.of(
+                        "employee_id", "EMP_" + record.getEmployee().getId().hashCode(),
+                        "work_date", record.getWorkDate(),
+                        "attendance_type", record.getAttendanceType(),
+                        "delay_minutes", record.getDelayMinutes() != null ? record.getDelayMinutes() : 0,
+                        "department", record.getEmployee().getDepartment()))
+                .collect(Collectors.toList());
     }
 
-    private double calculateDepartmentAttendanceRate(List<Employee> employees, 
-                                                   List<AttendanceRecord> records, YearMonth period) {
-        if (employees.isEmpty()) return 0.0;
-        
+    private double calculateDepartmentAttendanceRate(List<Employee> employees,
+            List<AttendanceRecord> records, YearMonth period) {
+        if (employees.isEmpty())
+            return 0.0;
+
         int workingDays = calculateWorkingDaysInMonth(period);
         long presentDays = records.stream()
-            .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
+                .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
                         r.getAttendanceType() == AttendanceRecord.AttendanceType.LATE)
-            .count();
-        
+                .count();
+
         return (double) presentDays / (employees.size() * workingDays) * 100;
     }
 
     private double calculateDepartmentPunctualityRate(List<AttendanceRecord> records) {
         long presentDays = records.stream()
-            .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
+                .filter(r -> r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
                         r.getAttendanceType() == AttendanceRecord.AttendanceType.LATE)
-            .count();
-        
-        if (presentDays == 0) return 0.0;
-        
+                .count();
+
+        if (presentDays == 0)
+            return 0.0;
+
         long punctualDays = records.stream()
-            .filter(r -> (r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
-                         r.getAttendanceType() == AttendanceRecord.AttendanceType.LATE) &&
+                .filter(r -> (r.getAttendanceType() == AttendanceRecord.AttendanceType.PRESENT ||
+                        r.getAttendanceType() == AttendanceRecord.AttendanceType.LATE) &&
                         (r.getDelayMinutes() == null || r.getDelayMinutes() == 0))
-            .count();
-        
+                .count();
+
         return (double) punctualDays / presentDays * 100;
     }
 
     private double calculateDepartmentAverageDelay(List<AttendanceRecord> records) {
         return records.stream()
-            .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
-            .mapToInt(AttendanceRecord::getDelayMinutes)
-            .average()
-            .orElse(0.0);
+                .filter(r -> r.getDelayMinutes() != null && r.getDelayMinutes() > 0)
+                .mapToInt(AttendanceRecord::getDelayMinutes)
+                .average()
+                .orElse(0.0);
     }
 
     private double calculateMonthlyAttendanceRate(YearMonth month) {
-        // Implémentation simplifiée - dans un vrai système, cela ferait une requête à la base
+        // Implémentation simplifiée - dans un vrai système, cela ferait une requête à
+        // la base
         return 85.0 + (Math.random() * 10); // Valeur simulée entre 85% et 95%
     }
 
     private String analyzeTrendDirection(Map<String, Double> monthlyRates) {
         List<Double> rates = new ArrayList<>(monthlyRates.values());
-        if (rates.size() < 2) return "STABLE";
-        
-        double firstHalf = rates.subList(0, rates.size()/2).stream().mapToDouble(Double::doubleValue).average().orElse(0);
-        double secondHalf = rates.subList(rates.size()/2, rates.size()).stream().mapToDouble(Double::doubleValue).average().orElse(0);
-        
-        if (secondHalf > firstHalf + 2) return "IMPROVING";
-        if (secondHalf < firstHalf - 2) return "DECLINING";
+        if (rates.size() < 2)
+            return "STABLE";
+
+        double firstHalf = rates.subList(0, rates.size() / 2).stream().mapToDouble(Double::doubleValue).average()
+                .orElse(0);
+        double secondHalf = rates.subList(rates.size() / 2, rates.size()).stream().mapToDouble(Double::doubleValue)
+                .average().orElse(0);
+
+        if (secondHalf > firstHalf + 2)
+            return "IMPROVING";
+        if (secondHalf < firstHalf - 2)
+            return "DECLINING";
         return "STABLE";
     }
 
@@ -507,52 +519,46 @@ public class HRReportService {
     private Map<String, Object> calculateTodayMetrics(LocalDate today) {
         // Implémentation simplifiée pour les métriques du jour
         return Map.of(
-            "employees_present", 85,
-            "employees_late", 12,
-            "employees_absent", 8,
-            "average_delay_minutes", 15.5
-        );
+                "employees_present", 85,
+                "employees_late", 12,
+                "employees_absent", 8,
+                "average_delay_minutes", 15.5);
     }
 
     private Map<String, Object> calculateMonthMetrics(YearMonth month) {
         // Implémentation simplifiée pour les métriques du mois
         return Map.of(
-            "attendance_rate", 87.5,
-            "punctuality_rate", 82.3,
-            "total_violations", 45,
-            "overtime_hours", 234.5
-        );
+                "attendance_rate", 87.5,
+                "punctuality_rate", 82.3,
+                "total_violations", 45,
+                "overtime_hours", 234.5);
     }
 
     private List<String> getActiveAlerts() {
         return List.of(
-            "3 employés avec plus de 5 retards ce mois",
-            "Département IT: taux d'absentéisme élevé",
-            "15 justifications en attente d'approbation"
-        );
+                "3 employés avec plus de 5 retards ce mois",
+                "Département IT: taux d'absentéisme élevé",
+                "15 justifications en attente d'approbation");
     }
 
     private List<String> getEmployeesNeedingAttention(YearMonth month) {
         return List.of(
-            "Jean Dupont - 8 retards ce mois",
-            "Marie Martin - 4 absences non justifiées",
-            "Pierre Durand - Taux de présence: 65%"
-        );
+                "Jean Dupont - 8 retards ce mois",
+                "Marie Martin - 4 absences non justifiées",
+                "Pierre Durand - Taux de présence: 65%");
     }
 
     private Map<String, Object> getRecentTrends() {
         return Map.of(
-            "attendance_trend", "STABLE",
-            "punctuality_trend", "DECLINING",
-            "violation_trend", "INCREASING"
-        );
+                "attendance_trend", "STABLE",
+                "punctuality_trend", "DECLINING",
+                "violation_trend", "INCREASING");
     }
 
     private List<String> getUpcomingDeadlines() {
         return List.of(
-            "Rapport mensuel d'assiduité - 5 jours",
-            "Évaluation des performances - 15 jours",
-            "Révision des politiques RH - 30 jours"
-        );
+                "Rapport mensuel d'assiduité - 5 jours",
+                "Évaluation des performances - 15 jours",
+                "Révision des politiques RH - 30 jours");
     }
 }

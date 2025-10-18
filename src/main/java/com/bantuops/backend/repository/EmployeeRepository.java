@@ -165,6 +165,11 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
      * Vérifie si un email existe déjà
      */
     boolean existsByEmail(String email);
+    
+    /**
+     * Vérifie si un email existe déjà (via PersonalInfo)
+     */
+    boolean existsByPersonalInfoEmail(String email);
 
     /**
      * Vérifie si un numéro d'identité nationale existe déjà
@@ -190,4 +195,31 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, JpaSp
      */
     @Query("UPDATE Employee e SET e.isActive = false WHERE e.id = :employeeId")
     void deactivateEmployee(@Param("employeeId") Long employeeId);
+    
+    /**
+     * Recherche par nom ou prénom (via PersonalInfo)
+     */
+    Page<Employee> findByPersonalInfoFirstNameContainingIgnoreCaseOrPersonalInfoLastNameContainingIgnoreCase(
+        String firstName, String lastName, Pageable pageable);
+    
+    /**
+     * Trouve par département (via EmploymentInfo)
+     */
+    Page<Employee> findByEmploymentInfoDepartment(String department, Pageable pageable);
+    
+    /**
+     * Trouve par statut actif (via EmploymentInfo)
+     */
+    Page<Employee> findByEmploymentInfoIsActive(Boolean isActive, Pageable pageable);
+    
+    /**
+     * Compte par statut actif (via EmploymentInfo)
+     */
+    long countByEmploymentInfoIsActive(boolean isActive);
+    
+    /**
+     * Compte par département
+     */
+    @Query("SELECT e.employmentInfo.department, COUNT(e) FROM Employee e WHERE e.employmentInfo.isActive = true GROUP BY e.employmentInfo.department")
+    List<Object[]> countByDepartment();
 }

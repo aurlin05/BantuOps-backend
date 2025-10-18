@@ -5,7 +5,6 @@ import com.bantuops.backend.dto.auth.AuthenticationResponse;
 import com.bantuops.backend.dto.auth.TokenResponse;
 import com.bantuops.backend.security.JwtAuthenticationService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -139,16 +138,16 @@ public class AuthController {
             @Valid @RequestBody AuthenticationRequest request,
             HttpServletRequest httpRequest) {
         
-        log.info("Tentative de connexion pour l'utilisateur: {}", request.getUsername());
+        log.info("Tentative de connexion pour l'utilisateur: {}", request.getUserAgent());
         
         try {
             AuthenticationResponse response = jwtAuthenticationService.authenticate(request);
             
-            log.info("Connexion réussie pour l'utilisateur: {}", request.getUsername());
+            log.info("Connexion réussie pour l'utilisateur: {}", request.getUserAgent());
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.warn("Échec de connexion pour l'utilisateur {}: {}", request.getUsername(), e.getMessage());
+            log.warn("Échec de connexion pour l'utilisateur {}: {}", request.getUserAgent(), e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
     }

@@ -50,7 +50,7 @@ public class AuditReportService {
     @PreAuthorize("hasAnyRole('ADMIN', 'AUDITOR')")
     @Transactional(readOnly = true)
     public AuditReportResponse generateSecureAuditReport(AuditReportRequest request) {
-        log.info("Génération de rapport d'audit sécurisé - Type: {}, Période: {} à {}", 
+        log.info("Génération de rapport d'audit sécurisé - Type: {}, Période: {} à {}",
                 request.getReportType(), request.getStartDate(), request.getEndDate());
 
         try {
@@ -100,7 +100,7 @@ public class AuditReportService {
                 response = encryptSensitiveReportData(response);
             }
 
-            log.info("Rapport d'audit généré avec succès - ID: {}, Événements: {}", 
+            log.info("Rapport d'audit généré avec succès - ID: {}, Événements: {}",
                     response.getReportId(), response.getTotalEvents());
 
             return response;
@@ -114,7 +114,8 @@ public class AuditReportService {
     /**
      * Génère un rapport d'audit compréhensif avec tous les types d'événements
      */
-    private AuditReportResponse generateComprehensiveAuditReport(AuditReportRequest request, AuditReportResponse response) {
+    private AuditReportResponse generateComprehensiveAuditReport(AuditReportRequest request,
+            AuditReportResponse response) {
         // Récupération des logs d'audit avec pagination
         Pageable pageable = PageRequest.of(0, Math.min(request.getMaxResults(), MAX_REPORT_SIZE));
         Page<AuditLog> auditLogsPage = auditLogRepository.findByTimestampBetween(
@@ -132,14 +133,14 @@ public class AuditReportService {
         response.setAuditLogs(auditLogsPage.getContent());
         response.setDataChanges(dataChangesPage.getContent());
         response.setFieldAudits(fieldAuditsPage.getContent());
-        response.setTotalEvents(auditLogsPage.getContent().size() + 
-                               dataChangesPage.getContent().size() + 
-                               fieldAuditsPage.getContent().size());
+        response.setTotalEvents(auditLogsPage.getContent().size() +
+                dataChangesPage.getContent().size() +
+                fieldAuditsPage.getContent().size());
 
         // Calcul des statistiques
         response.setStatistics(calculateComprehensiveStatistics(
-                auditLogsPage.getContent(), 
-                dataChangesPage.getContent(), 
+                auditLogsPage.getContent(),
+                dataChangesPage.getContent(),
                 fieldAuditsPage.getContent()));
 
         return response;
@@ -153,7 +154,12 @@ public class AuditReportService {
         var securityReport = securityAuditReporter.generateSecurityAuditReport(
                 request.getStartDate(), request.getEndDate());
 
-        response.setSecurityEvents(securityReport.getSecurityEvents());
+        // Conversion des AuditLog en SecurityEvent
+        List<AuditReportResponse.SecurityEvent> securityEvents = securityReport.getSecurityEvents().stream()
+                .map(this::convertToSecurityEvent)
+                .collect(Collectors.toList());
+
+        response.setSecurityEvents(securityEvents);
         response.setSecurityAlerts(securityReport.getSecurityAlerts());
         response.setThreatAnalysis(securityReport.getThreatAnalysis());
         response.setTotalEvents(securityReport.getSecurityEvents().size());
@@ -187,10 +193,15 @@ public class AuditReportService {
      */
     private AuditReportResponse generateComplianceReport(AuditReportRequest request, AuditReportResponse response) {
         var complianceReport = complianceReportGenerator.generateComplianceReport(
-                request.getStartDate(), request.getEndDate(), 
+                request.getStartDate(), request.getEndDate(),
                 ComplianceReportGenerator.ReportType.COMPLIANCE_CHECK);
 
-        response.setComplianceViolations(complianceReport.getComplianceViolations());
+        // Conversion des ComplianceViolation
+        List<AuditReportResponse.ComplianceViolation> violations = complianceReport.getComplianceViolations().stream()
+                .map(this::convertToComplianceViolation)
+                .collect(Collectors.toList());
+
+        response.setComplianceViolations(violations);
         response.setComplianceScore(complianceReport.getStatistics().getComplianceScore());
         response.setTotalEvents(complianceReport.getTotalEvents());
 
@@ -214,8 +225,8 @@ public class AuditReportService {
 
         // Filtrer par période
         List<AuditLog> filteredActivity = userActivityPage.getContent().stream()
-                .filter(log -> log.getTimestamp().isAfter(request.getStartDate()) && 
-                              log.getTimestamp().isBefore(request.getEndDate()))
+                .filter(log -> log.getTimestamp().isAfter(request.getStartDate()) &&
+                        log.getTimestamp().isBefore(request.getEndDate()))
                 .collect(Collectors.toList());
 
         response.setAuditLogs(filteredActivity);
@@ -230,7 +241,8 @@ public class AuditReportService {
     /**
      * Génère un rapport de performance système
      */
-    private AuditReportResponse generateSystemPerformanceReport(AuditReportRequest request, AuditReportResponse response) {
+    private AuditReportResponse generateSystemPerformanceReport(AuditReportRequest request,
+            AuditReportResponse response) {
         // Récupération des métriques de performance depuis les logs d'audit
         List<AuditLog> performanceLogs = auditLogRepository.findByTimestampBetween(
                 request.getStartDate(), request.getEndDate()).stream()
@@ -251,7 +263,7 @@ public class AuditReportService {
      */
     private AuditReportResponse applySecurityFilters(AuditReportResponse response, AuditReportRequest request) {
         String currentUserRole = getCurrentUserRole();
-        
+
         // Les utilisateurs non-admin ne peuvent pas voir certaines données sensibles
         if (!"ADMIN".equals(currentUserRole) && !"AUDITOR".equals(currentUserRole)) {
             response = filterSensitiveData(response);
@@ -273,10 +285,10 @@ public class AuditReportService {
             // Chiffrement des logs d'audit contenant des données sensibles
             if (response.getAuditLogs() != null) {
                 response.getAuditLogs().forEach(log -> {
-                    if (log.isSensitiveData() && log.getNewValues() != null) {
+                    if (log.getSensitiveData() != null && log.getSensitiveData() && log.getNewValues() != null) {
                         log.setNewValues(dataEncryptionService.encrypt(log.getNewValues()));
                     }
-                    if (log.isSensitiveData() && log.getOldValues() != null) {
+                    if (log.getSensitiveData() != null && log.getSensitiveData() && log.getOldValues() != null) {
                         log.setOldValues(dataEncryptionService.encrypt(log.getOldValues()));
                     }
                 });
@@ -285,7 +297,7 @@ public class AuditReportService {
             // Chiffrement des changements de données sensibles
             if (response.getDataChanges() != null) {
                 response.getDataChanges().forEach(change -> {
-                    if (change.isSensitiveField()) {
+                    if (change.getSensitiveField() != null && change.getSensitiveField()) {
                         if (change.getOldValue() != null) {
                             change.setOldValue(dataEncryptionService.encrypt(change.getOldValue()));
                         }
@@ -323,7 +335,8 @@ public class AuditReportService {
         }
 
         if (request.getMaxResults() > MAX_REPORT_SIZE) {
-            throw new IllegalArgumentException("Le nombre maximum de résultats ne peut pas dépasser " + MAX_REPORT_SIZE);
+            throw new IllegalArgumentException(
+                    "Le nombre maximum de résultats ne peut pas dépasser " + MAX_REPORT_SIZE);
         }
     }
 
@@ -336,9 +349,9 @@ public class AuditReportService {
         auditData.put("encryptSensitiveData", request.isEncryptSensitiveData());
 
         // Log de l'audit via AuditService (sera implémenté dans la tâche 7.1)
-        log.info("AUDIT_REPORT_GENERATION: User={}, Type={}, Period={} to {}", 
-                getCurrentUserId(), request.getReportType(), 
-                request.getStartDate().format(FORMATTER), 
+        log.info("AUDIT_REPORT_GENERATION: User={}, Type={}, Period={} to {}",
+                getCurrentUserId(), request.getReportType(),
+                request.getStartDate().format(FORMATTER),
                 request.getEndDate().format(FORMATTER));
     }
 
@@ -348,15 +361,14 @@ public class AuditReportService {
 
     private AuditReportResponse.Statistics calculateComprehensiveStatistics(
             List<AuditLog> auditLogs, List<DataChangeHistory> dataChanges, List<FieldLevelAudit> fieldAudits) {
-        
+
         AuditReportResponse.Statistics stats = new AuditReportResponse.Statistics();
 
         // Statistiques des actions
         Map<String, Long> actionCounts = auditLogs.stream()
                 .collect(Collectors.groupingBy(
-                    log -> log.getAction().toString(), 
-                    Collectors.counting()
-                ));
+                        log -> log.getAction().toString(),
+                        Collectors.counting()));
         stats.setActionCounts(actionCounts);
 
         // Statistiques des entités
@@ -374,9 +386,8 @@ public class AuditReportService {
         // Statistiques des changements de données
         Map<String, Long> changeTypeCounts = dataChanges.stream()
                 .collect(Collectors.groupingBy(
-                    change -> change.getChangeType().toString(), 
-                    Collectors.counting()
-                ));
+                        change -> change.getChangeType().toString(),
+                        Collectors.counting()));
         stats.setChangeTypeCounts(changeTypeCounts);
 
         return stats;
@@ -404,7 +415,7 @@ public class AuditReportService {
 
         // Changements de champs sensibles
         long sensitiveChanges = dataChanges.stream()
-                .mapToLong(change -> change.isSensitiveField() ? 1 : 0)
+                .mapToLong(change -> (change.getSensitiveField() != null && change.getSensitiveField()) ? 1 : 0)
                 .sum();
         stats.setSensitiveDataChanges(sensitiveChanges);
 
@@ -426,9 +437,8 @@ public class AuditReportService {
         // Actions par type
         Map<String, Long> actionCounts = userActivity.stream()
                 .collect(Collectors.groupingBy(
-                    log -> log.getAction().toString(), 
-                    Collectors.counting()
-                ));
+                        log -> log.getAction().toString(),
+                        Collectors.counting()));
         stats.setActionCounts(actionCounts);
 
         // Ressources accédées
@@ -447,11 +457,10 @@ public class AuditReportService {
                     .map(AuditLog::getTimestamp)
                     .max(LocalDateTime::compareTo)
                     .orElse(null);
-            
+
             stats.setActivityPeriod(Map.of(
-                "firstActivity", firstActivity != null ? firstActivity.format(FORMATTER) : "N/A",
-                "lastActivity", lastActivity != null ? lastActivity.format(FORMATTER) : "N/A"
-            ));
+                    "firstActivity", firstActivity != null ? firstActivity.format(FORMATTER) : "N/A",
+                    "lastActivity", lastActivity != null ? lastActivity.format(FORMATTER) : "N/A"));
         }
 
         return stats;
@@ -459,10 +468,10 @@ public class AuditReportService {
 
     private AuditReportResponse.Statistics calculatePerformanceStatistics(List<AuditLog> performanceLogs) {
         AuditReportResponse.Statistics stats = new AuditReportResponse.Statistics();
-        
+
         // Analyse des métriques de performance
         // TODO: Implémenter selon la structure des logs de performance
-        
+
         return stats;
     }
 
@@ -483,7 +492,7 @@ public class AuditReportService {
         // Filtrage des données sensibles pour les utilisateurs non autorisés
         if (response.getAuditLogs() != null) {
             response.getAuditLogs().forEach(log -> {
-                if (log.isSensitiveData()) {
+                if (log.getSensitiveData() != null && log.getSensitiveData()) {
                     log.setOldValues("[DONNÉES SENSIBLES MASQUÉES]");
                     log.setNewValues("[DONNÉES SENSIBLES MASQUÉES]");
                 }
@@ -492,7 +501,7 @@ public class AuditReportService {
 
         if (response.getDataChanges() != null) {
             response.getDataChanges().forEach(change -> {
-                if (change.isSensitiveField()) {
+                if (change.getSensitiveField() != null && change.getSensitiveField()) {
                     change.setOldValue("[MASQUÉ]");
                     change.setNewValue("[MASQUÉ]");
                 }
@@ -521,5 +530,51 @@ public class AuditReportService {
     private boolean hasPersonalDataAccess() {
         // TODO: Vérifier les permissions d'accès aux données personnelles
         return true; // Placeholder
+    }
+
+    /**
+     * Convertit un AuditLog en SecurityEvent
+     */
+    private AuditReportResponse.SecurityEvent convertToSecurityEvent(AuditLog auditLog) {
+        return AuditReportResponse.SecurityEvent.builder()
+                .eventId(auditLog.getId() != null ? auditLog.getId().toString() : null)
+                .timestamp(auditLog.getTimestamp())
+                .eventType(auditLog.getAction() != null ? auditLog.getAction().toString() : null)
+                .severity(auditLog.getSeverity() != null ? auditLog.getSeverity() : "MEDIUM")
+                .description(auditLog.getDescription() != null ? auditLog.getDescription()
+                        : "Security event: " + auditLog.getAction())
+                .userId(auditLog.getUserId())
+                .ipAddress(auditLog.getIpAddress())
+                .userAgent(auditLog.getUserAgent())
+                .details(Map.of(
+                        "entityType", auditLog.getEntityType() != null ? auditLog.getEntityType() : "",
+                        "entityId", auditLog.getEntityId() != null ? auditLog.getEntityId().toString() : "",
+                        "action", auditLog.getAction() != null ? auditLog.getAction().toString() : ""))
+                .resolved(auditLog.getResolved() != null ? auditLog.getResolved() : false)
+                .resolution(auditLog.getResolution())
+                .build();
+    }
+
+    /**
+     * Convertit un ComplianceViolation du générateur en ComplianceViolation de la
+     * réponse
+     */
+    private AuditReportResponse.ComplianceViolation convertToComplianceViolation(
+            ComplianceReportGenerator.ComplianceViolation violation) {
+        return AuditReportResponse.ComplianceViolation.builder()
+                .violationId(UUID.randomUUID().toString())
+                .timestamp(violation.getTimestamp())
+                .ruleType(violation.getViolationType())
+                .severity(violation.getSeverity())
+                .description(violation.getDescription())
+                .entityType(null) // Not available in source
+                .entityId(null) // Not available in source
+                .userId(violation.getUserId())
+                .context(Map.of(
+                        "violationType", violation.getViolationType(),
+                        "severity", violation.getSeverity()))
+                .resolved(false)
+                .correctionAction(null)
+                .build();
     }
 }

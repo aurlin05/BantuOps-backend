@@ -7,8 +7,7 @@ import com.bantuops.backend.entity.Invoice;
 import com.bantuops.backend.entity.PayrollRecord;
 import com.bantuops.backend.repository.EmployeeRepository;
 import com.bantuops.backend.repository.InvoiceRepository;
-import com.bantuops.backend.repository.PayrollRecordRepository;
-import com.bantuops.backend.service.audit.AuditService;
+import com.bantuops.backend.service.AuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,7 +30,6 @@ public class DataMigrationService {
 
     private final EmployeeRepository employeeRepository;
     private final InvoiceRepository invoiceRepository;
-    private final PayrollRecordRepository payrollRecordRepository;
     private final EncryptionMigrationService encryptionMigrationService;
     private final ValidationMigrationService validationMigrationService;
     private final AuditService auditService;

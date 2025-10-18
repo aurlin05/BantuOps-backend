@@ -4,10 +4,12 @@ import com.bantuops.backend.dto.PayrollResult;
 import com.bantuops.backend.entity.Employee;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.repository.JobExecutionAlreadyRunningException;
 import org.springframework.batch.core.repository.JobInstanceAlreadyCompleteException;
 import org.springframework.batch.core.repository.JobRestartException;
@@ -41,11 +43,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class BatchProcessingService {
 
-    private final JobBuilderFactory jobBuilderFactory;
-    private final StepBuilderFactory stepBuilderFactory;
+
     private final JobLauncher jobLauncher;
     private final DataSource dataSource;
-    private final EntityManagerFactory entityManagerFactory;
     private final PayrollCalculationService payrollCalculationService;
     private final PerformanceMonitoringService performanceMonitoringService;
     
@@ -142,7 +142,7 @@ public class BatchProcessingService {
     private ItemProcessor<Employee, PayrollResult> createPayrollProcessor() {
         return new ItemProcessor<Employee, PayrollResult>() {
             @Override
-            public PayrollResult process(Employee employee) throws Exception {
+            public PayrollResult process(@NotNull Employee employee) throws Exception {
                 try {
                     // Récupérer la période depuis les paramètres du job
                     YearMonth period = YearMonth.now(); // Simplification - devrait venir des paramètres

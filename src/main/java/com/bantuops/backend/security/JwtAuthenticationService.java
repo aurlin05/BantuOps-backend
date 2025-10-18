@@ -112,7 +112,7 @@ public class JwtAuthenticationService {
     public TokenResponse refreshToken(String refreshToken) {
         try {
             // Validate refresh token
-            Claims claims = validateToken(refreshToken);
+            Claims claims = validateTokenClaims(refreshToken);
             String userEmail = claims.getSubject();
 
             // Check if refresh token exists in Redis
@@ -148,7 +148,7 @@ public class JwtAuthenticationService {
 
     public void revokeToken(String token) {
         try {
-            Claims claims = validateToken(token);
+            Claims claims = validateTokenClaims(token);
             String userEmail = claims.getSubject();
 
             // Add token to blacklist
@@ -157,7 +157,8 @@ public class JwtAuthenticationService {
                 redisTemplate.opsForValue().set(
                         BLACKLIST_PREFIX + token,
                         "revoked",
-                        Duration.ofMilliseconds(expiration)
+                        expiration,
+                        TimeUnit.MILLISECONDS
                 );
             }
 
@@ -251,10 +252,6 @@ public class JwtAuthenticationService {
         }
     }
 
-    private Claims validateToken(String token) {
-        return validateTokenClaims(token);
-    }
-
     private boolean isTokenBlacklisted(String token) {
         return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + token));
     }
@@ -267,7 +264,8 @@ public class JwtAuthenticationService {
         redisTemplate.opsForValue().set(
                 REFRESH_TOKEN_PREFIX + userEmail,
                 refreshToken,
-                Duration.ofMilliseconds(expiration)
+                expiration,
+                TimeUnit.MILLISECONDS
         );
     }
 
